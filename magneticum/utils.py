@@ -330,7 +330,7 @@ def get_halo_catalog(group_base, blocks=['GPOS', 'MVIR', 'RVIR', 'M5CC', 'R5CC']
 
 	data = {key:np.concatenate(data[key]) for key in blocks}
 
-	joblib.dump(data, f'../output_data/halo_catalog/{box_name}/{sim_name}_sub_{redshift_id}.pkl', compress='lzma')
+	joblib.dump(data, f'../../magneticum-data/data/halo_catalog/{box_name}/{sim_name}_sub_{redshift_id}.pkl', compress='lzma')
 
 
 def get_hmf_from_halo_catalog(halo_catalog=None, mass=None, mr=1.3e10, return_dndlog10m=False, boxsize=None):

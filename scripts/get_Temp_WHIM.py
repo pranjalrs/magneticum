@@ -47,7 +47,7 @@ little_h = fof.header.HubbleParam
 
 
 
-halo_catalog = joblib.load(f'output_data/halo_catalog/{box}/{sim}_sub_{redshift_id}.pkl')
+halo_catalog = joblib.load(f'../magneticum-data/data/halo_catalog/{box}/{sim}_sub_{redshift_id}.pkl')
 
 data = []
 halo_positions = halo_catalog['GPOS']
@@ -109,4 +109,4 @@ with tqdm(total=len(inds)) as pbar:
 
 header = f'''Gas Temperature {m_min:.1E}<Mvir<{m_max:.1E} for {box}
 \n Mvir \t Temp_Rvir \t Temp_3Rvir \t Temp_WHIM'''
-np.savetxt(f'output_data/Temperature/{box}/Temp_mvir_{m_min:.1E}_{m_max:.1E}.txt', np.vstack((data)), header=header, comments='#', delimiter='\t')
+np.savetxt(f'../magneticum-data/data/Temperature/{box}/Temp_mvir_{m_min:.1E}_{m_max:.1E}.txt', np.vstack((data)), header=header, comments='#', delimiter='\t')

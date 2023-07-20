@@ -85,7 +85,7 @@ data = np.array(1, dtype=dtype)
 this_cosmo = utils.get_cosmology_dict_from_path(sim)
 cosmology.setCosmology('my_cosmo', this_cosmo)
 
-halo_catalog = joblib.load(f'../output_data/halo_catalog/{box}/{sim}_sub_{redshift_id}.pkl')
+halo_catalog = joblib.load(f'../../magneticum-data/data/halo_catalog/{box}/{sim}_sub_{redshift_id}.pkl')
 
 with tqdm(total=nhalo) as pbar:
 
@@ -143,21 +143,21 @@ with tqdm(total=nhalo) as pbar:
 data = np.delete(data, (0), axis=0)
 
 if args.isSave is True:
-	os.makedirs(f'output_data/Profiles_{estimator}/{box}/', exist_ok=True)
+	os.makedirs(f'../magneticum-data/data/Profiles_{estimator}/{box}/', exist_ok=True)
 
 	if binning == 'm500c':	
-		joblib.dump(data, f'output_data/Profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
+		joblib.dump(data, f'../magneticum-data/data/Profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
 	
 	if binning == 'nu_m500c':
-		joblib.dump(data, f'output_data/Profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1f}_{high_bin:.1f}.pkl')
+		joblib.dump(data, f'../magneticum-data/data/Profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1f}_{high_bin:.1f}.pkl')
 	
 	if binning == 'mvir':
-		joblib.dump(data, f'../output_data/Profiles_{estimator}/{box}/{"_".join(field)}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
+		joblib.dump(data, f'../../magneticum-data/data/Profiles_{estimator}/{box}/{"_".join(field)}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
 	
 	if args.isTest is True:
-		os.makedirs(f'output_data/test/Profiles_{estimator}/{box}/', exist_ok=True)
-		np.save(f'output_data/test/Profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.npy', data)
-		joblib.dump(data, f'output_data/test/Profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
+		os.makedirs(f'../magneticum-data/data/test/Profiles_{estimator}/{box}/', exist_ok=True)
+		np.save(f'../magneticum-data/data/test/Profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.npy', data)
+		joblib.dump(data, f'../magneticum-data/data/test/Profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
 
-#	joblib.dump(data, f'output_data/{field}_profile_{estimator}/{sim}/{field}_z={z:.2f}_Mmin_{m_min:.1E}_Mmax_{m_max:.1E}.pkl')
-# joblib.dump(data, 'output_data/Pe_profile/Pe_start_%d'%file_start+'_stop_%d'%file_stop+'.pkl')
+#	joblib.dump(data, f'../magneticum-data/data/{field}_profile_{estimator}/{sim}/{field}_z={z:.2f}_Mmin_{m_min:.1E}_Mmax_{m_max:.1E}.pkl')
+# joblib.dump(data, '../magneticum-data/data/Pe_profile/Pe_start_%d'%file_start+'_stop_%d'%file_stop+'.pkl')

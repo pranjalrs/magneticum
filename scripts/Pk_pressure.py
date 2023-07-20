@@ -94,9 +94,9 @@ else:
 	#        'shot_noise' : shot_noise
 		}
 
-	# joblib.dump(cube, 'output_data/pressure_grid_same_as_matter_Box3.pkl')
-	# joblib.dump(data, 'output_data/pressure_power_spectrum_Box3.pkl')
-	# joblib.dump(data, f'output_data/Pk_pressure/Pk_z={redshift:.2f}_R{resolution}_CIC.pkl')
-	joblib.dump(data, f'output_data/Box3/Pk_pressure/Pk_z={redshift:.2f}_R{resolution}_CIC.pkl')
-	#joblib.dump(data, f'output_data/Pk_pressure/Pk_z={redshift:.2f}_R{resolution}_CIC_masked.pkl')
-	# joblib.dump(data, f'output_data/Pk_pressure/Pk_z={redshift:.2f}_R{resolution}_CIC_subvolume{l}{m}{n}.pkl')
+	# joblib.dump(cube, '../magneticum-data/data/pressure_grid_same_as_matter_Box3.pkl')
+	# joblib.dump(data, '../magneticum-data/data/pressure_power_spectrum_Box3.pkl')
+	# joblib.dump(data, f'../magneticum-data/data/Pk_pressure/Pk_z={redshift:.2f}_R{resolution}_CIC.pkl')
+	joblib.dump(data, f'../magneticum-data/data/Box3/Pk_pressure/Pk_z={redshift:.2f}_R{resolution}_CIC.pkl')
+	#joblib.dump(data, f'../magneticum-data/data/Pk_pressure/Pk_z={redshift:.2f}_R{resolution}_CIC_masked.pkl')
+	# joblib.dump(data, f'../magneticum-data/data/Pk_pressure/Pk_z={redshift:.2f}_R{resolution}_CIC_subvolume{l}{m}{n}.pkl')

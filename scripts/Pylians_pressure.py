@@ -105,4 +105,4 @@ if __name__ == '__main__':
 	if save_Pk is True:
 		Pk = PKL.Pk(Pe_cube, BoxSize, axis, MAS, verbose)
 
-		np.savetxt(f'../Pylians_output/Pk_pressure/{box}/{Pe_field}_R{grid}_z={redshift:.4f}.txt', np.column_stack((Pk.k3D, Pk.Pk[:,0])), delimiter='\t')
+		np.savetxt(f'../../../magneticum-data/data/Pylians/Pk_pressure/{box}/{Pe_field}_R{grid}_z={redshift:.4f}.txt', np.column_stack((Pk.k3D, Pk.Pk[:,0])), delimiter='\t')

@@ -81,9 +81,9 @@ delta -= 1.0
 
 ## If we want to Mask Halos
 catalog ={}
-catalog['Box1a'] = joblib.load('output_data/halo_catalog/Box1a/mr_bao_sub_144.pkl')
-catalog['Box2'] = joblib.load('output_data/halo_catalog/Box2/hr_bao_sub_144.pkl')
-catalog['Box3'] = joblib.load('output_data/halo_catalog/Box3/hr_bao_sub_144.pkl')
+catalog['Box1a'] = joblib.load('../magneticum-data/data/halo_catalog/Box1a/mr_bao_sub_144.pkl')
+catalog['Box2'] = joblib.load('../magneticum-data/data/halo_catalog/Box2/hr_bao_sub_144.pkl')
+catalog['Box3'] = joblib.load('../magneticum-data/data/halo_catalog/Box3/hr_bao_sub_144.pkl')
 cube_path = f'/xdisk/timeifler/pranjalrs/cube/{box}_Pe_Mead_CIC_R1024.npy'
 
 
@@ -91,7 +91,7 @@ cube_path = f'/xdisk/timeifler/pranjalrs/cube/{box}_Pe_Mead_CIC_R1024.npy'
 Pe_cube = np.load(cube_path)
 Pk = PKL.XPk(np.array([delta, Pe_cube]), BoxSize, axis, [MAS, MAS], verbose)
 
-np.savetxt(f'Pylians_output/Pk_matterxpressure/{box}_{MAS}_R{grid}.txt', np.column_stack((Pk.k3D, Pk.XPk[:,0, 0])), delimiter='\t')
+np.savetxt(f'../../magneticum-data/data/Pylians/Pk_matterxpressure/{box}_{MAS}_R{grid}.txt', np.column_stack((Pk.k3D, Pk.XPk[:,0, 0])), delimiter='\t')
 
 ## Halo Only
 ## n=1
@@ -100,7 +100,7 @@ Pe_cube = np.load(cube_path) - halos
 
 Pk = PKL.XPk(np.array([delta, Pe_cube]), BoxSize, axis, [MAS, MAS], verbose)
 
-np.savetxt(f'Pylians_output/Pk_matterxpressure/{box}_halo_only_n1_{MAS}_R{grid}.txt', np.column_stack((Pk.k3D, Pk.XPk[:,0, 0])), delimiter='\t')
+np.savetxt(f'../../magneticum-data/data/Pylians/Pk_matterxpressure/{box}_halo_only_n1_{MAS}_R{grid}.txt', np.column_stack((Pk.k3D, Pk.XPk[:,0, 0])), delimiter='\t')
 
 # ## n=3
 halos, _ = Pylians_pressure_halos.get_halo_only_cube(cube_path, catalog[box], BoxSize, mmin=1e14, mmax=1e16, n=3)
@@ -108,4 +108,4 @@ Pe_cube = np.load(cube_path) - halos
 
 Pk = PKL.XPk(np.array([delta, Pe_cube]), BoxSize, axis, [MAS, MAS], verbose)
 
-np.savetxt(f'Pylians_output/Pk_matterxpressure/{box}_halo_only_n3_{MAS}_R{grid}.txt', np.column_stack((Pk.k3D, Pk.XPk[:,0, 0])), delimiter='\t')
+np.savetxt(f'../../magneticum-data/data/Pylians/Pk_matterxpressure/{box}_halo_only_n3_{MAS}_R{grid}.txt', np.column_stack((Pk.k3D, Pk.XPk[:,0, 0])), delimiter='\t')

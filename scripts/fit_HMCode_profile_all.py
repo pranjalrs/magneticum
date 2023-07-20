@@ -85,7 +85,7 @@ args = parser.parse_args()
 test = args.test
 
 #####-------------- Load Data --------------#####
-files = glob.glob('../output_data/Profiles_median/Box1a/Pe_Pe_Mead_Temp_matter_cdm_gas_z=0.00*')
+files = glob.glob('../../magneticum-data/data/profiles_median/Box1a/Pe_Pe_Mead_Temp_matter_cdm_gas_z=0.00*')
 
 
 Pe_sim= []

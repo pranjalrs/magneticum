@@ -96,4 +96,4 @@ data = {'file_path'  : file_path,
 
 
 
-joblib.dump(data, f'output_data/Pk_matter/{sim_box}/{sim_name}_z={redshift:.2f}_R512.pkl')
+joblib.dump(data, f'../magneticum-data/data/Pk_matter/{sim_box}/{sim_name}_z={redshift:.2f}_R512.pkl')

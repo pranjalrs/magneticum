@@ -59,7 +59,7 @@ def likelihood(cube):
 
 
 ## Load Data
-base = "../output_data/Profiles_median/Box1a/['Pe_Mead']_z=0.00_mvir_"
+base = "../../magneticum-data/data/profiles_median/Box1a/['Pe_Mead']_z=0.00_mvir_"
 files=[f'{base}3.2E+13_1.0E+14.pkl',
        f'{base}1.0E+14_3.2E+14.pkl',
        f'{base}3.2E+14_1.0E+15.pkl']
