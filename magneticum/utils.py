@@ -333,12 +333,16 @@ def get_halo_catalog(group_base, blocks=['GPOS', 'MVIR', 'RVIR', 'M5CC', 'R5CC']
 	joblib.dump(data, f'../output_data/halo_catalog/{box_name}/{sim_name}_sub_{redshift_id}.pkl', compress='lzma')
 
 
-def get_hmf_from_halo_catalog(halo_catalog, mr=1.3e10, return_dndlog10m=False, boxsize=None):
+def get_hmf_from_halo_catalog(halo_catalog=None, mass=None, mr=1.3e10, return_dndlog10m=False, boxsize=None):
 	'''
 	Compute HMF from halo catalog for a given snapshot
 	To Do: Add details to docstring
 	'''
-	halo_mass = (halo_catalog['MVIR']*Gadget.units.mass).value
+	if halo_catalog is not None:    
+		halo_mass = (halo_catalog['MVIR']*Gadget.units.mass).value
+
+	else:
+		halo_mass = mass
 
 	mass_min, mass_max = np.log10(55*mr), np.log10(max(halo_mass))  # In Msun/h
 	bins_per_dex = 10  # Bins per dex
@@ -349,14 +353,14 @@ def get_hmf_from_halo_catalog(halo_catalog, mr=1.3e10, return_dndlog10m=False, b
 							 range=(mass_min, mass_max))
 
 	center = np.array([(bin_edges[j]+bin_edges[j+1])/2 for j in range(len(mf))])
-	
+
 	if return_dndlog10m is True:
 		assert boxsize is not None, 'Need boxsize (in Mpc/h) to compute dn/dm'
 		Vbox = boxsize**3
 		bin_widths = np.array([(10**center[i+1]-10**center[i]) for i in range(len(center)-1)])
 		dndm = mf[:-1]/Vbox*10**center[:-1]/bin_widths*np.log(10)  # Count/Volume * M/delta_M
 		return dndm, 10**center[:-1]
-	
+
 	return mf, bin_edges
 
 

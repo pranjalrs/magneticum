@@ -50,35 +50,19 @@ class Profile():
         # 1 for mass scaling of gamma
         # 2 for mass scaling + modified scaling similar to Gupta 2015
         self.irho = 0
-        ## Are you going to run MCMC?
-        ## This enables an interpolator for the profile norm
-        self.ifit = False  # set to True if doing fits
-        self.zs = (0.,)  # Only used if ifit is True
 
+        ## Are you going to run MCMC?
+        ## This enables an interpolator for the profile
+        self.use_interp = False  # set to True for computing profiles using interpolation
+        self.zs = (0.,)  # Only used if use_interp is True
+        self.mmin = 1e13 # These are used only for profile interpolation
+        self.mmax = 1e16 # If no units supplied assumed in Msun/h
+
+        ##### Some class settings ####
+        self.verbose = False
+        self._interp_error_tol = 0.001 # %
         self.update_param(list(kwargs.keys()), list(kwargs.values()))
 
-    def _update_derived_param(self):
-        # Derived params
-        self.H0 = self.h * 100 *u.km/u.second/u.Mpc
-        self.mu_e = 2/(1 + self.f_H)
-        self.mu_p = 4/(3 + 5*self.f_H)
-
-        # For faster evaluation pre-compute norm
-        if self.ifit is True:
-            Mvirs = np.logspace(10, 16, 100)*u.Msun/cu.littleh
-            self._norm_interpolate = {}
-
-            norms = np.zeros((len(self.zs), len(Mvirs)))
-            for i in range(len(self.zs)):
-                norms = []
-                for j, m in enumerate(Mvirs):
-                    rvir = self.get_rvirial(m, z=self.zs[i])
-                    c_M = self.get_concentration(m, z=self.zs[i])
-                    this_norm = self.get_norm(self._get_rho_bnd_wrapper, m, rvir, c_M=c_M)
-                    norms.append(this_norm.value)
-
-                self._norm_interpolate[self.zs[i]] = scipy.interpolate.CubicSpline(Mvirs, norms, extrapolate=False)
-            self._norm_interpolate_units = this_norm.unit
 
     def update_param(self, names, values):
         """Updates class attributes and derived parameters
@@ -91,40 +75,99 @@ class Profile():
             Updated values
         """
         for i in range(len(names)):
-            if names[i] not in self.__dict__.keys():
-                print(f'Unkown Attribute {names[i]} !')
-                return
-
-            if names[i]=='log10_M0':
-                self.__setattr__(names[i], 10**values[i]*u.Msun/cu.littleh)
-
-            elif names[i]=='M0':
+            if names[i]=='M0':
                 self.__setattr__(names[i], values[i]*u.Msun/cu.littleh)
+
+            elif names[i] not in self.__dict__.keys():
+                if names[i]=='log10_M0':
+                    self.__setattr__('M0', 10**values[i]*u.Msun/cu.littleh)
+
+                else:
+                    print(f'Unkown attribute `{names[i]}`! Ignoring..')
+                    continue
 
             else:
                 self.__setattr__(names[i], values[i])
         self._update_derived_param()
 
-    
-    def get_Pe_profile(self, M, z=0):
+
+    def get_Pe_profile(self, M, z=0, r_bins=None):
         """Computes pressure profile for a given mass from 0.1-1Rvir
 
         Parameters
         ----------
         M : float
             Virial Mass (in Msun/h)
-        a : float, optional
-            scale factor, by default 1
-
+        z : float, optional
+            Redshift, by default 0
         Returns
         -------
         _type_
             r as a fraction of virial radius
         """
+
+        if r_bins is None:
+            r_bins = np.logspace(np.log10(0.1), np.log10(1), 200)
+
         rvir = self.get_rvirial(M, z)
-        r_bins = np.logspace(np.log10(0.1), np.log10(1), 200)*rvir
-        this_profile = self.get_Pe(M, r_bins, z=z)
-        return this_profile, (r_bins/rvir).value
+        this_profile = self.get_Pe(M, r_bins*rvir, z=z)
+        
+        return this_profile, r_bins
+
+
+    def get_Pe_profile_interpolated(self, M, z=0, r_bins=None):
+        """_summary_
+
+        Parameters
+        ----------
+        M : np.array
+            1D array of masses with appropriate astropy units
+            Needs to be strictly increasing
+        z : int, optional
+            redshift, by default 0
+        r_bins : np.array, optional
+            1D array of radial bins in terms of r/Rvir, by default None
+
+        Returns
+        -------
+        _type_
+            _description_
+
+        Raises
+        ------
+        Exception
+            _description_
+        Exception
+            _description_
+        Exception
+            _description_
+        """
+        if '_prof_interpolator' not in self.__dict__:
+            raise Exception('Attempting to use interpolator without initiliazing! \n Please set ifit to True')
+
+        if r_bins is None:
+            r_bins = np.logspace(np.log10(0.1), np.log10(1), 200)
+
+        this_z_interp = self._prof_interpolator[z]
+        m_min, m_max = this_z_interp.get_knots()[0].min(), this_z_interp.get_knots()[0].max()
+        r_min, r_max = this_z_interp.get_knots()[1].min(), this_z_interp.get_knots()[1].max()
+
+
+        M = M.to(u.Msun/cu.littleh)
+
+        if np.any((M.value < m_min) | (M.value > m_max)):
+            idx = np.where((M.value < m_min) | (M.value > m_max))[0][0]
+            raise Exception(f'''Mass {np.log10(M.value[idx]):.2f} Msun/h is outside the interpolation 
+            range of {np.log10(m_min):.2f} - {np.log10(m_max):.2f} Msun/h!''')
+        
+        if np.any((r_bins < r_min) | (r_bins > r_max)):
+            idx = np.where((r_bins < r_min) | (r_bins > r_max))[0][0]
+            raise Exception(f'Radius outside interpolation range of {r_min} - {r_max} R/Rvir!')
+
+        this_profile = this_z_interp(M, r_bins)
+        this_profile *= self._prof_interpolator_units
+
+        return this_profile, r_bins
 
 
     def get_Pe(self, M, r, z):
@@ -160,13 +203,8 @@ class Profile():
     def get_rho_bnd(self, M, r, r_virial, c_M, z):
         rho_bnd = self._get_rho_bnd_wrapper(M, r, r_virial=r_virial, c_M=c_M)
 
-        if self.ifit is True:        
-            norm = self.get_norm(self._get_rho_bnd_wrapper, M, r_virial=r_virial, c_M=c_M)
+        norm = self.get_norm(self._get_rho_bnd_wrapper, M, r_virial=r_virial, c_M=c_M)
         
-        elif self.ifit is False:
-            z_index = np.where(z==self.zs)[0]
-            norm = self._norm_interpolate[z_index](M)*self._norm_interpolate_units
-
         return rho_bnd*self.get_f_bnd(M)*M / norm
 
 
@@ -300,3 +338,76 @@ class Profile():
         """Eq. 25
         """
         return self.omega_b/self.omega_m * (M/self.M0)**self.beta/(1 + (M/self.M0)**self.beta)
+
+    def _update_derived_param(self):
+        # Derived params
+        self.H0 = self.h * 100 *u.km/u.second/u.Mpc
+        self.mu_e = 2/(1 + self.f_H)
+        self.mu_p = 4/(3 + 5*self.f_H)
+
+        # For faster evaluation pre-compute norm
+        if self.use_interp is True:
+            # self._init_norm_interp()
+            self._init_prof_interpolator()
+
+    # def _init_norm_interp(self):
+    #     Mvirs = np.logspace(10, 16, 100)*u.Msun/cu.littleh
+    #     self._norm_interpolate = {}
+
+    #     norms = np.zeros((len(self.zs), len(Mvirs)))
+    #     for i in range(len(self.zs)):
+    #         norms = []
+    #         for j, m in enumerate(Mvirs):
+    #             rvir = self.get_rvirial(m, z=self.zs[i])
+    #             c_M = self.get_concentration(m, z=self.zs[i])
+    #             this_norm = self.get_norm(self._get_rho_bnd_wrapper, m, rvir, c_M=c_M)
+    #             norms.append(this_norm.value)
+
+    #         self._norm_interpolate[self.zs[i]] = scipy.interpolate.CubicSpline(Mvirs, norms, extrapolate=False)
+    #     self._norm_interpolate_units = this_norm.unit
+
+    def _init_prof_interpolator(self):
+        self._prof_interpolator = {}
+
+        r_bins = np.logspace(np.log10(0.09), np.log10(1), 200)
+        Mvirs = np.logspace(np.log10(self.mmin), np.log10(self.mmax), 50)*u.Msun/cu.littleh
+
+        for z in self.zs:
+            profs = []
+            for j, m in enumerate(Mvirs):
+                this_prof = self.get_Pe_profile(m, z, r_bins=r_bins)[0]
+                profs.append(this_prof.value)
+
+            self._prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, profs)
+        self._prof_interpolator_units = this_prof.unit
+
+
+    def _test_prof_interpolator(self, n=1000):
+        if self.use_interp is False:
+            print('`use_interp` set to False...Creating interpolator..')
+            self._init_prof_interpolator()
+        
+        # Get r_bins
+        r_bins = self.get_Pe_profile(1e12*u.Msun/cu.littleh, 0)[1]
+
+        # Now test at each redshift
+        for z in self.zs:
+            Ms = 10**np.random.uniform(np.log10(self.mmin), np.log10(self.mmax), n)*u.Msun/cu.littleh
+            difference = 0
+            for j, m in enumerate(Ms):
+                true_prof = self.get_Pe_profile(m, z)[0].value
+                interp_prof = np.concatenate(self._prof_interpolator[z](m, r_bins))
+ 
+                this_diff = np.sum(np.abs(interp_prof/true_prof - 1))
+                difference += this_diff
+
+            mean_difference = difference/n*100
+
+            # Raise exception if frac. diff > 0.001 %
+            if mean_difference > self._interp_error_tol:
+                raise Exception(f'Interpolation test failed with a mean frac. difference of {mean_difference:.4f}%. Test failed! :(')
+
+            if self.verbose is True:
+                print(f'Mean frac. difference between interpolated and true profile...')
+                print(f'At z={z} is {mean_difference:.4f} %')
+                print('Success!')
