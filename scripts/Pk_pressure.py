@@ -6,7 +6,7 @@ import numpy as np
 import g3read
 
 import sys
-sys.path.append('../src/')
+sys.path.append('../core/')
 
 from Pk_tools import get_field_hist, calc_amp_FFT, calc_freq_FFT, calc_Pk, get_field_hist_test
 

@@ -1,7 +1,7 @@
 import argparse
 
 import sys
-sys.path.append('../src/')
+sys.path.append('../core/')
 
 import utils
 

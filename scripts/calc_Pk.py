@@ -5,7 +5,7 @@ import sys
 
 import g3read
 
-from src.Pk_tools import get_field_hist, calc_amp_FFT, calc_freq_FFT, calc_Pk
+from core.Pk_tools import get_field_hist, calc_amp_FFT, calc_freq_FFT, calc_Pk
 
 sim_box = sys.argv[1]
 sim_name = sys.argv[2]

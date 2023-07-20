@@ -10,7 +10,7 @@ import astropy.units as u
 import Pk_library as PKL
 
 import sys
-sys.path.append('../src/')
+sys.path.append('../core/')
 
 import Pk_tools
 

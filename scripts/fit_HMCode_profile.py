@@ -16,7 +16,7 @@ import glob
 import emcee
 
 import sys
-sys.path.append('../src/')
+sys.path.append('../core/')
 
 from analytic_profile import Profile
 import post_processing

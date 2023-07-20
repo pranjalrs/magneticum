@@ -13,7 +13,7 @@ import g3read
 import sys
 
 import sys
-sys.path.append('../src/')
+sys.path.append('../core/')
 
 import utils
 
