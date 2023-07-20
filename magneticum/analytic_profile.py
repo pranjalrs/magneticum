@@ -11,13 +11,25 @@ import astropy.cosmology.units as cu
 
 class Profile():
     def __init__(self, **kwargs) -> None:
+        ## Cosmology
+        self.omega_m = 0.272
+        self.omega_b = 0.0456
+        self.h = 0.704
+
+
         ## HMCode
         self.f_H = 0.76
-        self.gamma = 1.177  # Polytropic index for bound gas profile
         self.alpha = 0.8471
+        self.HMCode_rescale_A = 1.2989607249999999
         self.M0 = 10**13.5937 * u.Msun/cu.littleh
         self.beta = 0.6
-        self.HMCode_rescale_A = 1.2989607249999999
+        ## Halo concentration
+        # epsilon1 = epsilon1_0 + epsilon1_1 * z
+        self.eps1_0, self.eps1_1 = -0.1065, -0.1073
+        self.eps2_0, self.eps2_1 = 0., 0.
+
+        ## For irho = 0
+        self.gamma = 1.177  # Polytropic index for bound gas profile
 
         ## For irho = 1
         self.a = 0  # gamma= gamma*(M/M0)^a
@@ -30,19 +42,6 @@ class Profile():
         self.beta_1 = 0.05
         self.beta_2 = 0.  # For redshift scaling, disabled
         self.eta = 1.3
-
-
-        ## Halo concentration
-        # epsilon1 = epsilon1_0 + epsilon1_1 * z
-        self.eps1_0, self.eps1_1 = -0.1065, -0.1073
-        self.eps2_0, self.eps2_1 = 0., 0.
-
-
-
-        ## Cosmology
-        self.omega_m = 0.272
-        self.omega_b = 0.0456
-        self.h = 0.704
 
         ##### Check these parameters before producing profiles ####
         ## Choose Profile
@@ -60,9 +59,55 @@ class Profile():
 
         ##### Some class settings ####
         self.verbose = False
-        self._interp_error_tol = 0.001 # %
+        self.interp_error_tol = 0.001 # %
         self.update_param(list(kwargs.keys()), list(kwargs.values()))
 
+    def __str__(self):
+        info = ""
+        irho_dict = {0:'default HMCode', 1:'mass dependent gamma', 2:'e-GNFW'}
+        cosmo_pars = ['omega_m', 'omega_b', 'h']
+        global_halo_pars = ['f_H', 'alpha', 'HMCode_rescale_A', 'M0', 'beta',
+                            'eps1_0', 'eps1_1', 'eps2_0', 'eps2_1']
+        prof_halo_pars={0: ['gamma'],
+                        1: ['gamma', 'a'],
+                        2: ['gamma_0', 'gamma_1', 'gamma_2', 'beta_0', 
+                            'beta_1', 'beta_2', 'eta']}
+        misc_pars = ['use_interp', 'zs', 'mmin', 'mmax', 'interp_error_tol']
+
+        info += 'Cosmology\n'
+        info += '---------\n'
+        for item in cosmo_pars:
+            info += f'{item} = {self.__getattribute__(item)}\n'
+        info += '\n'
+
+        info += 'Global Halo Parameters\n'
+        info += '----------------------\n'
+        for item in global_halo_pars:
+            info += f'{item} = {self.__getattribute__(item)}\n'
+        info += '\n'
+
+        info += 'Profile Halo Parameters\n'
+        info += '-----------------------\n'
+        info += f'irho={self.irho}: Using {irho_dict[self.irho]} profile\n'
+
+        for item in prof_halo_pars[self.irho]:
+            info += f'{item} = {self.__getattribute__(item)}\n'
+        info += '\n'
+
+        info += 'Misc. Parameters\n'
+        info += '----------------\n'
+        if self.use_interp is False: info += f'use_interp = False'
+        else:
+            for item in misc_pars:
+                info += f'{item} = {self.__getattribute__(item)}\n'
+        info += '\n'
+
+        info += f'verbose = {self.verbose}'  
+
+        return info
+
+    def __repr__(self):
+        return self.__str__()
 
     def update_param(self, names, values):
         """Updates class attributes and derived parameters
@@ -222,8 +267,8 @@ class Profile():
             return self._get_rho_bnd((r/r_s).decompose(), M, params, irho=0)
 
         if self.irho == 1:
-            params = {'gamma': self.gamma,
-                        'a': self.a}
+            params = {'gamma': self.gamma, 'a': self.a}
+
             return self._get_rho_bnd((r/r_s).decompose(), M, params, irho=1)
 
         if self.irho == 2:
@@ -234,6 +279,7 @@ class Profile():
                         'beta_1': self.beta_1,
                         'beta_2': self.beta_2,
                         'eta': self.eta} 
+
             return self._get_rho_bnd((r/r_s).decompose(), (M/M0).decompose(), params, irho=2, c_M=c_M)
 
     @staticmethod
@@ -404,7 +450,7 @@ class Profile():
             mean_difference = difference/n*100
 
             # Raise exception if frac. diff > 0.001 %
-            if mean_difference > self._interp_error_tol:
+            if mean_difference > self.interp_error_tol:
                 raise Exception(f'Interpolation test failed with a mean frac. difference of {mean_difference:.4f}%. Test failed! :(')
 
             if self.verbose is True:
