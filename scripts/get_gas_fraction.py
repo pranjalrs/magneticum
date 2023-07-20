@@ -52,7 +52,7 @@ little_h = fof.header.HubbleParam
 
 
 
-halo_catalog = joblib.load(f'output_data/halo_catalog/{box}/{sim}_sub_{redshift_id}.pkl')
+halo_catalog = joblib.load(f'../../magneticum-data/data/halo_catalog/{box}/{sim}_sub_{redshift_id}.pkl')
 
 data = []
 
@@ -98,4 +98,4 @@ with tqdm(total=len(inds)) as pbar:
 header = f'''Gas fractions for {m_min:.1E}<Mvir<{m_max:.1E} for {box}
 f_bnd = fgas(<R); f_ejec = fgas(<3R)-fgas(<R)
 \n Mvir \t f_bnd_r500c \t f_bnd_rvir \t f_ejec_rvir'''
-np.savetxt(f'output_data/gas_fraction/{box}/gas_fraction_mvir_{m_min:.1E}_{m_max:.1E}.txt', np.vstack((data)), header=header, comments='#', delimiter='\t')
+np.savetxt(f'../../magneticum-data/data/gas_fraction/{box}/gas_fraction_mvir_{m_min:.1E}_{m_max:.1E}.txt', np.vstack((data)), header=header, comments='#', delimiter='\t')

@@ -74,9 +74,9 @@ if __name__ == '__main__':
 	
 	## Load halo catalogs
 	catalog ={}
-	catalog['Box1a'] = joblib.load('output_data/halo_catalog/Box1a/mr_bao_sub_144.pkl')
-	catalog['Box2'] = joblib.load('output_data/halo_catalog/Box2/hr_bao_sub_144.pkl')
-	catalog['Box3'] = joblib.load('output_data/halo_catalog/Box3/hr_bao_sub_144.pkl')
+	catalog['Box1a'] = joblib.load('../magneticum-data/data/halo_catalog/Box1a/mr_bao_sub_144.pkl')
+	catalog['Box2'] = joblib.load('../magneticum-data/data/halo_catalog/Box2/hr_bao_sub_144.pkl')
+	catalog['Box3'] = joblib.load('../magneticum-data/data/halo_catalog/Box3/hr_bao_sub_144.pkl')
 
 	box_size = {}  # In Mpc/h
 	box_size['Box1a'] = 896

@@ -85,7 +85,7 @@ data = np.array(1, dtype=dtype)
 this_cosmo = utils.get_cosmology_dict_from_path(sim)
 cosmology.setCosmology('my_cosmo', this_cosmo)
 
-halo_catalog = joblib.load(f'output_data/halo_catalog/{box}/{sim}_sub_{redshift_id}.pkl')
+halo_catalog = joblib.load(f'../magneticum-data/data/halo_catalog/{box}/{sim}_sub_{redshift_id}.pkl')
 
 with tqdm(total=nhalo) as pbar:
     inds = np.where((halo_catalog['MVIR']*mass_unit.value >= low_bin) & (halo_catalog['MVIR']*mass_unit.value < high_bin))[0]
@@ -112,10 +112,10 @@ with tqdm(total=nhalo) as pbar:
 data = np.delete(data, (0), axis=0)
 
 if args.isSave is True:
-	os.makedirs(f'output_data/Pe_total/{box}', exist_ok=True)
+	os.makedirs(f'../magneticum-data/data/Pe_total/{box}', exist_ok=True)
 
 	if binning == 'mvir':
-		joblib.dump(data, f'output_data/Pe_total/{box}/{sim}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
+		joblib.dump(data, f'../magneticum-data/data/Pe_total/{box}/{sim}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
 
-#	joblib.dump(data, f'output_data/{field}_profile_{estimator}/{sim}/{field}_z={z:.2f}_Mmin_{m_min:.1E}_Mmax_{m_max:.1E}.pkl')
-# joblib.dump(data, 'output_data/Pe_profile/Pe_start_%d'%file_start+'_stop_%d'%file_stop+'.pkl')
+#	joblib.dump(data, f'../magneticum-data/data/{field}_profile_{estimator}/{sim}/{field}_z={z:.2f}_Mmin_{m_min:.1E}_Mmax_{m_max:.1E}.pkl')
+# joblib.dump(data, '../magneticum-data/data/Pe_profile/Pe_start_%d'%file_start+'_stop_%d'%file_stop+'.pkl')

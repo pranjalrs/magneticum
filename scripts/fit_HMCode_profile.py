@@ -55,7 +55,7 @@ def likelihood(x):
 
 
 ## Load Data
-base = "../output_data/Profiles_median/Box1a/['Pe_Mead']_z=0.00_mvir_"
+base = "../../magneticum-data/data/profiles_median/Box1a/['Pe_Mead']_z=0.00_mvir_"
 files=[f'{base}3.2E+13_1.0E+14.pkl',
        f'{base}1.0E+14_3.2E+14.pkl',
        f'{base}3.2E+14_1.0E+15.pkl']
@@ -127,7 +127,7 @@ sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
 ## Make and save plots
 walkers = sampler.get_chain()
 chain = sampler.get_chain(discard=int(0.9*nsteps), flat=True)
-np.savetxt('emcee_output/samples_emcee.txt', chain)
+np.savetxt('../../magneticum-data/data/emcee/samples_emcee.txt', chain)
 
 par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\\beta', '\epsilon_1', '\epsilon_2']
 

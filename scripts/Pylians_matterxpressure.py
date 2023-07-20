@@ -81,9 +81,9 @@ delta -= 1.0
 
 ## If we want to Mask Halos
 catalog ={}
-catalog['Box1a'] = joblib.load('output_data/halo_catalog/Box1a/mr_bao_sub_144.pkl')
-catalog['Box2'] = joblib.load('output_data/halo_catalog/Box2/hr_bao_sub_144.pkl')
-catalog['Box3'] = joblib.load('output_data/halo_catalog/Box3/hr_bao_sub_144.pkl')
+catalog['Box1a'] = joblib.load('../magneticum-data/data/halo_catalog/Box1a/mr_bao_sub_144.pkl')
+catalog['Box2'] = joblib.load('../magneticum-data/data/halo_catalog/Box2/hr_bao_sub_144.pkl')
+catalog['Box3'] = joblib.load('../magneticum-data/data/halo_catalog/Box3/hr_bao_sub_144.pkl')
 cube_path = f'/xdisk/timeifler/pranjalrs/cube/{box}_Pe_Mead_CIC_R1024.npy'
 
 

@@ -75,4 +75,4 @@ data = {'file_path'  : file_path,
 
 
 
-joblib.dump(data, 'output_data/Pk_dmxPe/Pk_dmxPe_z=0_R512.pkl')
+joblib.dump(data, '../../magneticum-data/data/Pk_dmxPe/Pk_dmxPe_z=0_R512.pkl')
