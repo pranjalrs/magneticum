@@ -180,6 +180,10 @@ else:
 
 #####-------------- Plot and Save --------------#####
 save_path = f'../../magneticum_data/data/emcee/fit_Pe_all/run{run}'
+if not os.path.exists(save_path):
+    # If the folder does not exist, create it and break the loop
+    os.makedirs(save_path)
+
 walkers = sampler.get_chain()
 chain = sampler.get_chain(discard=int(0.8*nsteps), flat=True)
 
