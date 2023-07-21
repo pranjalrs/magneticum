@@ -68,10 +68,11 @@ class Profile():
         cosmo_pars = ['omega_m', 'omega_b', 'h']
         global_halo_pars = ['f_H', 'alpha', 'HMCode_rescale_A', 'M0', 'beta',
                             'eps1_0', 'eps1_1', 'eps2_0', 'eps2_1']
-        prof_halo_pars={0: ['gamma'],
+        prof_halo_pars = {0: ['gamma'],
                         1: ['gamma', 'a'],
                         2: ['gamma_0', 'gamma_1', 'gamma_2', 'beta_0', 
                             'beta_1', 'beta_2', 'eta']}
+        derived_halo_pars = ['mu_e', 'mu_p']
         misc_pars = ['use_interp', 'zs', 'mmin', 'mmax', 'interp_error_tol']
 
         info += 'Cosmology\n'
@@ -91,6 +92,12 @@ class Profile():
         info += f'irho={self.irho}: Using {irho_dict[self.irho]} profile\n'
 
         for item in prof_halo_pars[self.irho]:
+            info += f'{item} = {self.__getattribute__(item)}\n'
+        info += '\n'
+
+        info += 'Derived Parameters\n'
+        info += '----------------------\n'
+        for item in derived_halo_pars:
             info += f'{item} = {self.__getattribute__(item)}\n'
         info += '\n'
 
