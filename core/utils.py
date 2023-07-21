@@ -46,7 +46,7 @@ def get_physical_density_in_spherical_shell(mass, r1, r2, z, little_h):
 
 	comoving_density = mass/total_volume
 	physical_density = comoving_density*Gadget.convert.density_to_physical(z, little_h)
-	return physical_dm_density.to(u.g/u.cm**3)
+	return physical_density.to(u.GeV/u.cm**3, u.mass_energy())
 
 
 def get_comoving_electron_pressure(rho, Temp, Y):
@@ -166,7 +166,7 @@ def get_field_for_halo(particle_data, mask, z, little_h, field, r1=None, r2=None
 		Temp = particle_data[0]['TEMP'][mask[0]]
 		Y = particle_data[0]['Zs  '][mask[0]][:, 0]  # Helium Fraction
 		
-		Pe_physical = get_physical_electron_pressure_Mead(mass, Temp, Y, shell_volume, z, little_h)
+		Pe_physical = get_physical_electron_pressure_Mead(mass, Temp, Y, r1, r2, z, little_h)
 		return Pe_physical
 
 	if field == "Temp":
@@ -175,17 +175,21 @@ def get_field_for_halo(particle_data, mask, z, little_h, field, r1=None, r2=None
 
 	if field=="cdm":
 		rho_cdm = get_physical_density_in_spherical_shell(particle_data[1]['MASS'][mask[1]], r1, r2, z, little_h)
-		return rho_cdm.to(u.g/u.cm**3)
+		return rho_cdm
 
 	if field=="gas":
 		rho_gas = get_physical_density_in_spherical_shell(particle_data[0]['MASS'][mask[0]], r1, r2, z, little_h)
-		return rho_gas.to(u.g/u.cm**3)
+		return rho_gas
 
 	if field=="matter":
 		rho_gas = get_physical_density_in_spherical_shell(particle_data[0]['MASS'][mask[0]], r1, r2, z, little_h)
-		rho_star = get_physical_density_in_spherical_shell(particle_data[4]['MASS'][mask[4]], r1, r2, z, little_h)
 		rho_cdm = get_physical_density_in_spherical_shell(particle_data[1]['MASS'][mask[1]], r1, r2, z, little_h)
-		return np.concatenate((rho_gas, rho_star, rho_cdm)).to(u.g/u.cm**3)
+
+		try:
+			rho_star = get_physical_density_in_spherical_shell(particle_data[4]['MASS'][mask[4]], r1, r2, z, little_h)
+		except:
+			rho_star = []
+		return np.concatenate((rho_gas, rho_star, rho_cdm))
 
 
 def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, z, little_h, estimator='median'):
@@ -256,20 +260,24 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 	"""
 	To Do: Update Doctstring
 	"""
-
 	rmin, rmax = 0.1*halo_radius, 3*halo_radius
 	radial_bins = np.logspace(np.log10(rmin), np.log10(rmax), 31)  # Radial bin edges  (0.1-3)*R500c kpc/h
 
 	## g3read.to_spherical returns an array of [r, theta, phi]
 	part_distance_from_center = {}
+
 	for this_ptype in ptype:
-		part_distance_from_center[this_ptype] = g3read.to_spherical(particle_data[this_ptype]['POS '], halo_center).T[0]
+		if particle_data[this_ptype]['POS '] is not None:
+			part_distance_from_center[this_ptype] = g3read.to_spherical(particle_data[this_ptype]['POS '], halo_center).T[0]
+		else:
+			#part_distance_from_center[this_ptype] = []
+			ptype.remove(this_ptype)
+			
 
-
-	weighted_bin_center = np.ones(len(radial_bins)-1)
-	profile = np.zeros(len(radial_bins)-1)
-	sigma_prof = np.zeros(len(radial_bins)-1)
-	sigma_lnprof = np.zeros(len(radial_bins)-1)
+	weighted_bin_center = np.ones(len(radial_bins)-1, dtype='float32')
+	profile = np.zeros(len(radial_bins)-1, dtype='float32')
+	sigma_prof = np.zeros(len(radial_bins)-1, dtype='float32')
+	sigma_lnprof = np.zeros(len(radial_bins)-1, dtype='float32')
 
 	## Calcualte field in each radial bin
 	for bin_index in range(len(radial_bins)-1):
@@ -298,11 +306,17 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 			elif estimator == 'sum':
 				profile[bin_index] = np.sum(this_bin_field)
 				sigma_prof[bin_index] = np.nanstd(this_bin_field)*n_part**0.5
-				sigma_lnprof[bin_index] = np.nanstd(np.log(this_bin_field), where=~np.isinf(this_bin_field))*n_part**0.5
+				sigma_lnprof[bin_index] = (np.log(1 + sigma_prof[bin_index]**2/profile[bin_index]**2))**0.5
 
 			# Concatenate positions and masses for all ptypes
-			all_part_distance_from_center = np.concatenate([part_distance_from_center[part][mask[part]] for part in ptype])
-			all_part_mass = np.concatenate([particle_data[part]['MASS'][mask[part]] for part in ptype])
+			all_part_distance_from_center = []
+			all_part_mass = []
+			for part in ptype:
+				all_part_distance_from_center.append(part_distance_from_center[part][mask[part]])
+				all_part_mass.append(particle_data[part]['MASS'][mask[part]])
+
+			all_part_distance_from_center = np.concatenate(all_part_distance_from_center)
+			all_part_mass = np.concatenate(all_part_mass)
 
 			weighted_bin_center[bin_index] = np.average(all_part_distance_from_center, weights=all_part_mass)
 
