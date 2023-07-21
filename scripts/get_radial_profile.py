@@ -31,13 +31,13 @@ parser.add_argument('--estimator', default='median', type=str)
 parser.add_argument('--nhalo', default=2000, type=int)
 parser.add_argument('--file_start', default=0, type=int)
 parser.add_argument('--file_stop', default=512, type=int)
-parser.add_argument('--binning', default='m500c', type=str, choices=['m500c', 'mvir', 'nu_m500c'])
+parser.add_argument('--binning', default='mvir', type=str, choices=['m500c', 'mvir', 'nu_m500c'])
 parser.add_argument('--nu_min', default=1., type=float)
 parser.add_argument('--nu_max', default=4., type=float)
 parser.add_argument('--m_min', default=1e11, type=float)
 parser.add_argument('--m_max', default=1e16, type=float)
 parser.add_argument('--isSave', default=True, type=bool)
-parser.add_argument('--isTest', default=False, type=bool)
+parser.add_argument('--test', default=False, type=bool)
 args = parser.parse_args()
 
 box = args.box
@@ -143,21 +143,21 @@ with tqdm(total=nhalo) as pbar:
 data = np.delete(data, (0), axis=0)
 
 if args.isSave is True:
-	os.makedirs(f'../magneticum-data/data/Profiles_{estimator}/{box}/', exist_ok=True)
+	os.makedirs(f'../../magneticum-data/data/profiles_{estimator}/{box}/', exist_ok=True)
 
 	if binning == 'm500c':	
-		joblib.dump(data, f'../magneticum-data/data/Profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
+		joblib.dump(data, f'../../magneticum-data/data/profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
 	
 	if binning == 'nu_m500c':
-		joblib.dump(data, f'../magneticum-data/data/Profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1f}_{high_bin:.1f}.pkl')
+		joblib.dump(data, f'../../magneticum-data/data/profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1f}_{high_bin:.1f}.pkl')
 	
 	if binning == 'mvir':
-		joblib.dump(data, f'../../magneticum-data/data/Profiles_{estimator}/{box}/{"_".join(field)}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
+		joblib.dump(data, f'../../magneticum-data/data/profiles_{estimator}/{box}/{"_".join(field)}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
 	
-	if args.isTest is True:
-		os.makedirs(f'../magneticum-data/data/test/Profiles_{estimator}/{box}/', exist_ok=True)
-		np.save(f'../magneticum-data/data/test/Profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.npy', data)
-		joblib.dump(data, f'../magneticum-data/data/test/Profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
+	if args.test is True:
+		os.makedirs(f'../../magneticum-data/data/test/profiles_{estimator}/{box}/', exist_ok=True)
+		np.save(f'../../magneticum-data/data/test/profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.npy', data)
+		joblib.dump(data, f'../../magneticum-data/data/test/profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
 
 #	joblib.dump(data, f'../magneticum-data/data/{field}_profile_{estimator}/{sim}/{field}_z={z:.2f}_Mmin_{m_min:.1E}_Mmax_{m_max:.1E}.pkl')
 # joblib.dump(data, '../magneticum-data/data/Pe_profile/Pe_start_%d'%file_start+'_stop_%d'%file_stop+'.pkl')
