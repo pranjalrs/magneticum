@@ -12,7 +12,7 @@ import astropy.constants as constants
 import g3read
 
 import sys
-sys.path.append('../src/')
+sys.path.append('../core/')
 
 from gadget import Gadget
 
@@ -38,15 +38,15 @@ def get_physical_density_in_spherical_shell(mass, r1, r2, z, little_h):
 	"""Calculates dark matter density in physical units by
 	summing total mass and dividing by the shell volume
 	"""
-	total_mass = np.sum(mass)*Gadget.units.mass
+	mass = mass*Gadget.units.mass
 
 	assert r1 < r2, "r1 must be smaller than r2 "
 	r1, r2 = r1*Gadget.units.length, r2*Gadget.units.length
 	total_volume = 4*np.pi/3 * (r2**3 - r1**3)
 
-	comoving_dm_density = total_mass/total_volume
-	physical_dm_density = comoving_dm_density*Gadget.convert.density_to_physical(z, little_h)
-	return physical_dm_density.to(u.g/u.cm**3)
+	comoving_density = mass/total_volume
+	physical_density = comoving_density*Gadget.convert.density_to_physical(z, little_h)
+	return physical_density.to(u.GeV/u.cm**3, u.mass_energy())
 
 
 def get_comoving_electron_pressure(rho, Temp, Y):
@@ -80,20 +80,24 @@ def get_comoving_electron_pressure(rho, Temp, Y):
 
 	return Pe
 
-def get_comoving_electron_pressure_Mead(mass, Temp, Y, cell_volume):
+def get_comoving_electron_pressure_Mead(mass, Temp, Y, r1, r2):
+	assert r1 < r2, "r1 must be smaller than r2 "
+	r1, r2 = r1*Gadget.units.length, r2*Gadget.units.length
+	shell_volume = 4*np.pi/3 * (r2**3 - r1**3)
+
 	Temp = Temp * Gadget.units.Temperature
 	mass = mass * Gadget.units.mass
 	mu_e = 2/(2-Y) # Mean mass per electron
 	Ne = mass/constants.m_p/mu_e  # No. of electrons
-	Pe = Ne*constants.k_B*Temp/cell_volume
+	Pe = Ne*constants.k_B*Temp/shell_volume
 
 	Pe = Pe.to(u.keV/u.cm**3)
 
 	return Pe
 
 
-def get_physical_electron_pressure_Mead(mass, Temp, Y, cell_volume, z, little_h):
-	comoving_Pe = get_comoving_electron_pressure_Mead(mass, Temp, Y, cell_volume)
+def get_physical_electron_pressure_Mead(mass, Temp, Y, r1, r2, z, little_h):
+	comoving_Pe = get_comoving_electron_pressure_Mead(mass, Temp, Y, r1, r2)
 	physical_Pe = comoving_Pe* Gadget.convert.pressure_to_physical(z, little_h)
 
 	return physical_Pe
@@ -157,15 +161,12 @@ def get_field_for_halo(particle_data, mask, z, little_h, field, r1=None, r2=None
 		return Pe
 	
 	if field == 'Pe_Mead':
-		assert r1 < r2, "r1 must be smaller than r2 "
-		r1, r2 = r1*Gadget.units.length, r2*Gadget.units.length
-		shell_volume = 4*np.pi/3 * (r2**3 - r1**3)
 		
 		mass = particle_data[0]['MASS'][mask[0]]
 		Temp = particle_data[0]['TEMP'][mask[0]]
 		Y = particle_data[0]['Zs  '][mask[0]][:, 0]  # Helium Fraction
 		
-		Pe_physical = get_physical_electron_pressure_Mead(mass, Temp, Y, shell_volume, z, little_h)
+		Pe_physical = get_physical_electron_pressure_Mead(mass, Temp, Y, r1, r2, z, little_h)
 		return Pe_physical
 
 	if field == "Temp":
@@ -174,17 +175,21 @@ def get_field_for_halo(particle_data, mask, z, little_h, field, r1=None, r2=None
 
 	if field=="cdm":
 		rho_cdm = get_physical_density_in_spherical_shell(particle_data[1]['MASS'][mask[1]], r1, r2, z, little_h)
-		return rho_cdm.to(u.g/u.cm**3)
+		return rho_cdm
 
 	if field=="gas":
 		rho_gas = get_physical_density_in_spherical_shell(particle_data[0]['MASS'][mask[0]], r1, r2, z, little_h)
-		return rho_gas.to(u.g/u.cm**3)
+		return rho_gas
 
 	if field=="matter":
 		rho_gas = get_physical_density_in_spherical_shell(particle_data[0]['MASS'][mask[0]], r1, r2, z, little_h)
-		rho_star = get_physical_density_in_spherical_shell(particle_data[4]['MASS'][mask[4]], r1, r2, z, little_h)
 		rho_cdm = get_physical_density_in_spherical_shell(particle_data[1]['MASS'][mask[1]], r1, r2, z, little_h)
-		return (rho_gas + rho_star + rho_cdm).to(u.g/u.cm**3)
+
+		try:
+			rho_star = get_physical_density_in_spherical_shell(particle_data[4]['MASS'][mask[4]], r1, r2, z, little_h)
+		except:
+			rho_star = []
+		return np.concatenate((rho_gas, rho_star, rho_cdm))
 
 
 def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, z, little_h, estimator='median'):
@@ -255,20 +260,24 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 	"""
 	To Do: Update Doctstring
 	"""
-
 	rmin, rmax = 0.1*halo_radius, 3*halo_radius
 	radial_bins = np.logspace(np.log10(rmin), np.log10(rmax), 31)  # Radial bin edges  (0.1-3)*R500c kpc/h
 
 	## g3read.to_spherical returns an array of [r, theta, phi]
 	part_distance_from_center = {}
+
 	for this_ptype in ptype:
-		part_distance_from_center[this_ptype] = g3read.to_spherical(particle_data[this_ptype]['POS '], halo_center).T[0]
+		if particle_data[this_ptype]['POS '] is not None:
+			part_distance_from_center[this_ptype] = g3read.to_spherical(particle_data[this_ptype]['POS '], halo_center).T[0]
+		else:
+			#part_distance_from_center[this_ptype] = []
+			ptype.remove(this_ptype)
+			
 
-
-	weighted_bin_center = np.ones(len(radial_bins)-1)
-	profile = np.zeros(len(radial_bins)-1)
-	sigma_prof = np.zeros(len(radial_bins)-1)
-	sigma_lnprof = np.zeros(len(radial_bins)-1)
+	weighted_bin_center = np.ones(len(radial_bins)-1, dtype='float32')
+	profile = np.zeros(len(radial_bins)-1, dtype='float32')
+	sigma_prof = np.zeros(len(radial_bins)-1, dtype='float32')
+	sigma_lnprof = np.zeros(len(radial_bins)-1, dtype='float32')
 
 	## Calcualte field in each radial bin
 	for bin_index in range(len(radial_bins)-1):
@@ -282,24 +291,35 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 		# Check if we have particles in the bin
 		if np.sum([len(mask[this_ptype]) for this_ptype in ptype])!=0:
 			this_bin_field = get_field_for_halo(particle_data, mask, z, little_h, field, r_low, r_up).value
+			n_part = len(this_bin_field)  # No. of particles
 
 			if estimator == 'median':
 				profile[bin_index] = np.median(this_bin_field)
+				sigma_prof[bin_index] = np.nanstd(this_bin_field)/n_part**0.5
+				sigma_lnprof[bin_index] = np.nanstd(np.log(this_bin_field), where=~np.isinf(this_bin_field))/n_part**0.5
 
 			elif estimator == 'mean':
 				profile[bin_index] = np.mean(this_bin_field)
+				sigma_prof[bin_index] = np.nanstd(this_bin_field)/n_part**0.5
+				sigma_lnprof[bin_index] = np.nanstd(np.log(this_bin_field), where=~np.isinf(this_bin_field))/n_part**0.5
 
 			elif estimator == 'sum':
 				profile[bin_index] = np.sum(this_bin_field)
+				sigma_prof[bin_index] = np.nanstd(this_bin_field)*n_part**0.5
+				sigma_lnprof[bin_index] = (np.log(1 + sigma_prof[bin_index]**2/profile[bin_index]**2))**0.5
 
 			# Concatenate positions and masses for all ptypes
-			all_part_distance_from_center = np.concatenate([part_distance_from_center[part][mask[part]] for part in ptype])
-			all_part_mass = np.concatenate([particle_data[part]['MASS'][mask[part]] for part in ptype])
+			all_part_distance_from_center = []
+			all_part_mass = []
+			for part in ptype:
+				all_part_distance_from_center.append(part_distance_from_center[part][mask[part]])
+				all_part_mass.append(particle_data[part]['MASS'][mask[part]])
+
+			all_part_distance_from_center = np.concatenate(all_part_distance_from_center)
+			all_part_mass = np.concatenate(all_part_mass)
 
 			weighted_bin_center[bin_index] = np.average(all_part_distance_from_center, weights=all_part_mass)
 
-			sigma_prof[bin_index] = np.nanstd(this_bin_field)
-			sigma_lnprof[bin_index] = np.nanstd(np.log(this_bin_field), where=~np.isinf(this_bin_field))
 
 		else:
 			profile[bin_index] = 0
