@@ -171,7 +171,7 @@ else:
     sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
 
 #####-------------- Plot and Save --------------#####
-save_path = 'emcee_output/fit_Pe_all/'
+save_path = '../../magneticum_data/data/emcee/fit_Pe_all/'
 walkers = sampler.get_chain()
 chain = sampler.get_chain(discard=int(0.8*nsteps), flat=True)
 
