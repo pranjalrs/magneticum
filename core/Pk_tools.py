@@ -4,7 +4,7 @@ import numpy as np
 from tqdm import tqdm
 
 import sys
-sys.path.append('../src/')
+sys.path.append('../core/')
 
 from utils import get_physical_electron_pressure, get_physical_electron_pressure_Mead
 

@@ -7,7 +7,10 @@ import astropy.units as u
 import g3read
 import Pk_library as PKL
 
-import src.Pk_tools as Pk_tools
+import sys
+sys.path.append('../core/')
+
+import Pk_tools as Pk_tools
 
 class PyliansTools():
 	def __init__(self, box, sim, ):
