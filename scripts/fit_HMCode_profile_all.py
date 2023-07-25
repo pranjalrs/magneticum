@@ -50,6 +50,7 @@ def likelihood(x, mass_list, z=0):
     median_prof = np.median(Pe_theory.value, axis=0)
     update = np.mean((np.log(Pe_sim)-np.log(median_prof))**2, axis=0)**0.5
     update_sigma_intr(update)
+    print(sigma_intr)
 
     return -chi2
 
@@ -179,7 +180,7 @@ else:
     sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
 
 #####-------------- Plot and Save --------------#####
-save_path = f'../../magneticum_data/data/emcee/fit_Pe_all/run{run}'
+save_path = f'../../magneticum-data/data/emcee/fit_Pe_all/run{run}'
 if not os.path.exists(save_path):
     # If the folder does not exist, create it and break the loop
     os.makedirs(save_path)
