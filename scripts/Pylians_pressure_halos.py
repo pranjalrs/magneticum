@@ -62,7 +62,7 @@ def save_everything_but_halo_Pk(path, catalog, box_size, mmin, mmax='1e17', n=1)
 	k, Pk = Pk.k3D, Pk.Pk[:, 0]
 
 	metadata = f'Pressure power spectra from excluding all halos halos with Mvir > {float(mmin):.2E} Msun \n Only include halos up to n={n}*Rvir \n Fraction of total Pe in halos is {frac}'
-	np.savetxt(f'../../magneticum-data/data/Pylians/Pk_pressure/{box}/Pk_exclude_all_halos_n{n}.txt', np.column_stack((k, Pk)), header=metadata, comments='#', delimiter='\t')
+	np.savetxt(f'../../magneticum-data/data/Pylians/Pk_pressure/{box}/Pk_exclude_all_halos_{mmin}_n{n}.txt', np.column_stack((k, Pk)), header=metadata, comments='#', delimiter='\t')
 
 
 if __name__ == '__main__':
@@ -74,9 +74,9 @@ if __name__ == '__main__':
 	
 	## Load halo catalogs
 	catalog ={}
-	catalog['Box1a'] = joblib.load('../magneticum-data/data/halo_catalog/Box1a/mr_bao_sub_144.pkl')
-	catalog['Box2'] = joblib.load('../magneticum-data/data/halo_catalog/Box2/hr_bao_sub_144.pkl')
-	catalog['Box3'] = joblib.load('../magneticum-data/data/halo_catalog/Box3/hr_bao_sub_144.pkl')
+	catalog['Box1a'] = joblib.load('../../magneticum-data/data/halo_catalog/Box1a/mr_bao_sub_144.pkl')
+	catalog['Box2'] = joblib.load('../../magneticum-data/data/halo_catalog/Box2/hr_bao_sub_144.pkl')
+	catalog['Box3'] = joblib.load('../../magneticum-data/data/halo_catalog/Box3/hr_bao_sub_144.pkl')
 
 	box_size = {}  # In Mpc/h
 	box_size['Box1a'] = 896
@@ -85,7 +85,7 @@ if __name__ == '__main__':
 
 	this_catalog = catalog[box]
 	this_box_size = box_size[box]
-	cube_path = f'/xdisk/timeifler/pranjalrs/cube/{box}_Pe_Mead_CIC_R1024.npy'
+	cube_path = f'/xdisk/timeifler/pranjalrs/cube/{box}_Pe_Mead_R1024_z=0.0000.npy'
 	save_path = f'../../magneticum-data/data/Pylians/Pk_pressure/{box}/Pk_halos_only_'
 
 	# ## Get halos up to only 1 Virial radius
