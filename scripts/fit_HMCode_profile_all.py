@@ -86,6 +86,7 @@ std_dev = {'f_H': 0.2,
 parser = argparse.ArgumentParser()
 parser.add_argument('--test', type=bool, default=False)
 parser.add_argument('--run', type=int)
+parser.add_argument('--nsteps', type=int)
 args = parser.parse_args()
 test = args.test
 run = args.run
@@ -104,6 +105,7 @@ Mvir_sim = []
 Pe_rescale = []
 r_bins = np.logspace(np.log10(0.1), np.log10(1), 20)
 
+print('Reading profile data...')
 for f in files:
     this_prof_data = joblib.load(f)
     
@@ -151,7 +153,7 @@ std = [std_dev[k] for k in fit_par]
 
 ndim = len(fit_par)
 nwalkers= 2 * ndim
-nsteps = 3000
+nsteps = args.nsteps
 
 p0_walkers = emcee.utils.sample_ball(starting_point, std, size=nwalkers)
 
@@ -164,6 +166,8 @@ for i, key in enumerate(fit_par):
 
 
 #####-------------- RUN MCMC --------------#####
+print('Running MCMC..')
+
 if test is False:
     with MPIPool() as pool:
         if not pool.is_master():
