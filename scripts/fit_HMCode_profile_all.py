@@ -24,9 +24,13 @@ sys.path.append('../core/')
 from analytic_profile import Profile
 import post_processing
 
-def update_sigma_intr(val):
-    global sigma_intr
-    sigma_intr = val
+def update_sigma_intr(val1, val2):
+    global sigma_intr_Pe
+    global sigma_intr_rho
+
+    sigma_intr_Pe = val1
+    sigma_intr_rho = val2
+
 
 def likelihood(x, mass_list, z=0):
     for i in range(len(fit_par)):
@@ -39,20 +43,58 @@ def likelihood(x, mass_list, z=0):
     mvir = mass_list*u.Msun/cu.littleh
     ## Get profile for each halo
     Pe_theory, r = fitter.get_Pe_profile_interpolated(mvir, r_bins=r_bins, z=z)
-    
+
     chi2 = 0 
 
     num = np.log(Pe_sim / Pe_theory.value)**2
-    denom = sigmalnP_sim**2 + sigma_intr**2
-    chi2 = -0.5*np.sum(num/denom)  # Sum over radial bins
+    denom = sigmalnP_sim**2 + sigma_intr_Pe**2
+    chi2 = 0.5*np.sum(num/denom)  # Sum over radial bins
     
     # Compute new sigma_intr about the best fit mean
     median_prof = np.median(Pe_theory.value, axis=0)
     update = np.mean((np.log(Pe_sim)-np.log(median_prof))**2, axis=0)**0.5
-    update_sigma_intr(update)
-    print(sigma_intr)
+    update_sigma_intr(update, 0)
 
     return -chi2
+
+
+def joint_likelihood(x, mass_list, z=0):
+    for i in range(len(fit_par)):
+        lb, ub = bounds[fit_par[i]]
+        if x[i]<lb or x[i]>ub:
+            return -np.inf
+
+    fitter.update_param(fit_par, x)
+
+    mvir = mass_list*u.Msun/cu.littleh
+    ## Get profile for each halo
+    Pe_theory, rho_theory, r = fitter.get_Pe_profile_interpolated(mvir, r_bins=r_bins, z=z, return_rho=True)
+
+    chi2 = 0 
+
+    ## Get chi2 for Pe
+    num = np.log(Pe_sim / Pe_theory.value)**2
+    denom = sigmalnP_sim**2 + sigma_intr_Pe**2
+    chi2 = -0.5*np.sum(num/denom)  # Sum over radial bins
+
+
+    # Compute new sigma_intr about the best fit mean
+    median_prof = np.median(Pe_theory.value, axis=0)
+    update_sigma_Pe = np.mean((np.log(Pe_sim)-np.log(median_prof))**2, axis=0)**0.5
+
+    ## Get chi2 for rho
+    num = np.log(rho_sim / rho_theory.value)**2
+    denom = sigmalnrho_sim**2 + sigma_intr_rho**2
+    chi2 += 0.5*np.sum(num/denom)  # Sum over radial bins
+
+
+    # Compute new sigma_intr about the best fit mean
+    median_prof = np.median(Pe_theory.value, axis=0)
+    update_sigma_rho = np.mean((np.log(Pe_sim)-np.log(median_prof))**2, axis=0)**0.5
+    update_sigma_intr(update_sigma_Pe, update_sigma_rho)
+
+    return -chi2
+
 
 bounds = {'f_H': [0.65, 0.85],
         'gamma': [1.1, 5],
@@ -84,6 +126,7 @@ std_dev = {'f_H': 0.2,
 #####-------------- Parse Args --------------#####
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--field', default='Pe', type=str)
 parser.add_argument('--test', type=bool, default=False)
 parser.add_argument('--run', type=int)
 parser.add_argument('--nsteps', type=int)
@@ -97,15 +140,20 @@ files = glob.glob('../../magneticum-data/data/profiles_median/Box1a/Pe_Pe_Mead_T
 ## We will interpolate all measured profiles to the same r_bins as 
 ## the analytical profile for computational efficiency
 Pe_sim= []
+rho_sim= []
+
 # r_sim = []
 sigmalnP_sim = []
+sigmalnrho_sim = []
+
 Mvir_sim = []
 
 ## Also need to rescale profile to guess intrinsic scatter 
 Pe_rescale = []
+rho_rescale = []
+
 r_bins = np.logspace(np.log10(0.1), np.log10(1), 20)
 
-print('Reading profile data...')
 for f in files:
     this_prof_data = joblib.load(f)
     
@@ -126,6 +174,24 @@ for f in files:
 
         Pe_rescale.append(np.interp(r_bins, this_prof_r, prof_rescale))
 
+
+        #### Now do same things for rho
+        this_prof_r = halo['fields']['gas'][1]/halo['rvir']
+        mask = this_prof_r<1
+        this_prof_r = this_prof_r[mask]
+        this_prof_field = halo['fields']['gas'][0][mask]
+        this_sigma_lnP = halo['fields']['gas'][3][mask]
+
+        rho_sim.append(np.interp(r_bins, this_prof_r, this_prof_field))
+        # r_sim.append(this_prof_r)
+        sigmalnrho_sim.append(this_sigma_lnP)
+
+        #Rescale prof to get intr. scatter
+        idx = np.argmin(np.abs(halo['rvir']-halo['fields']['gas'][1]))
+        prof_rescale = (halo['fields']['gas'][0] / halo['fields']['gas'][0][idx])[mask]
+
+        rho_rescale.append(np.interp(r_bins, this_prof_r, prof_rescale))
+
     Mvir_sim.append(this_prof_data['mvir'])
 
 # Now we need to sort halos in order of increasing mass
@@ -134,14 +200,20 @@ Mvir_sim = np.concatenate(Mvir_sim, dtype='float32')
 sorting_indices = np.argsort(Mvir_sim)
 
 Pe_sim = np.array(Pe_sim, dtype='float32')[sorting_indices]
-# r_sim = np.array(r_sim, dtype='float32')[sorting_indices]
 sigmalnP_sim = np.array(sigmalnP_sim, dtype='float32')[sorting_indices]
+rho_sim = np.array(rho_sim, dtype='float32')[sorting_indices]
+sigmalnrho_sim = np.array(sigmalnrho_sim, dtype='float32')[sorting_indices]
 Mvir_sim = Mvir_sim[sorting_indices]
+
 
 Pe_rescale = np.vstack(Pe_rescale)
 median_prof = np.median(Pe_rescale, axis=0)
-sigma_intr_init = np.mean((np.log(Pe_rescale)-np.log(median_prof))**2, axis=0)**0.5
-update_sigma_intr(sigma_intr_init)
+sigma_intr_Pe_init = np.mean((np.log(Pe_rescale)-np.log(median_prof))**2, axis=0)**0.5
+rho_rescale = np.vstack(rho_rescale)
+median_prof = np.median(rho_rescale, axis=0)
+sigma_intr_rho_init = np.mean((np.log(rho_rescale)-np.log(median_prof))**2, axis=0)**0.5
+
+update_sigma_intr(sigma_intr_Pe_init, sigma_intr_rho_init)
 
 #####-------------- Prepare for MCMC --------------#####
 fitter = Profile(use_interp=True)
@@ -164,7 +236,8 @@ for i, key in enumerate(fit_par):
         while p0_walkers[walker, i] < low_lim or p0_walkers[walker, i] > up_lim:
             p0_walkers[walker, i] = np.random.rand()*std[i] + starting_point[i]
 
-
+if args.field == 'both': use_likelihood = joint_likelihood
+else: use_likelihood = likelihood
 #####-------------- RUN MCMC --------------#####
 print('Running MCMC..')
 
@@ -175,16 +248,16 @@ if test is False:
             sys.exit(0)
         
         print('Running MCMC with MPI...')
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, likelihood, pool=pool, args=[Mvir_sim])
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, use_likelihood, pool=pool, args=[Mvir_sim])
         sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
 
 else:
     print('Running MCMC...')
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, likelihood, args=[Mvir_sim])
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, use_likelihood, args=[Mvir_sim])
     sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
 
 #####-------------- Plot and Save --------------#####
-save_path = f'../../magneticum-data/data/emcee/fit_Pe_all/run{run}'
+save_path = f'../../magneticum-data/data/emcee/fit_{args.field}_all/run{run}'
 if not os.path.exists(save_path):
     # If the folder does not exist, create it and break the loop
     os.makedirs(save_path)
@@ -195,7 +268,7 @@ chain = sampler.get_chain(discard=int(0.8*nsteps), flat=True)
 log_prob_samples = sampler.get_log_prob(discard=int(0.8*nsteps), flat=True)
 
 all_samples = np.concatenate((chain, log_prob_samples[:, None]), axis=1)
-np.savetxt(f'{save_path}/all_samples.txt', chain)
+np.savetxt(f'{save_path}/all_samples.txt')
 np.savetxt(f'{save_path}/sigma_intr.txt', np.column_stack((sigma_intr_init, sigma_intr)), header='initial guess \t best fit')
 
 
