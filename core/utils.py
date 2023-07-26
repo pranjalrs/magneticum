@@ -295,18 +295,21 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 
 			if estimator == 'median':
 				profile[bin_index] = np.median(this_bin_field)
-				sigma_prof[bin_index] = np.nanstd(this_bin_field)/n_part**0.5
-				sigma_lnprof[bin_index] = np.nanstd(np.log(this_bin_field), where=~np.isinf(this_bin_field))/n_part**0.5
+				sigma_prof[bin_index] = sigma_percentile(this_bin_field)/n_part**0.5
+				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))/n_part**0.5
+
 
 			elif estimator == 'mean':
 				profile[bin_index] = np.mean(this_bin_field)
-				sigma_prof[bin_index] = np.nanstd(this_bin_field)/n_part**0.5
-				sigma_lnprof[bin_index] = np.nanstd(np.log(this_bin_field), where=~np.isinf(this_bin_field))/n_part**0.5
+				sigma_prof[bin_index] = sigma_percentile(this_bin_field)/n_part**0.5
+
+				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))/n_part**0.5
+
 
 			elif estimator == 'sum':
 				profile[bin_index] = np.sum(this_bin_field)
-				sigma_prof[bin_index] = np.nanstd(this_bin_field)*n_part**0.5
-				sigma_lnprof[bin_index] = (np.log(1 + sigma_prof[bin_index]**2/profile[bin_index]**2))**0.5
+				sigma_prof[bin_index] = sigma_percentile(this_bin_field)*n_part**0.5
+				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))*n_part**0.5
 
 			# Concatenate positions and masses for all ptypes
 			all_part_distance_from_center = []
@@ -496,3 +499,6 @@ def get_fb(filename):
 	omega_m = get_omega_m(filename)
 	
 	return omega_b/omega_m
+
+def sigma_percentile(arr):
+	return (np.percentile(arr, 84) - np.percentile(arr, 16))/2
