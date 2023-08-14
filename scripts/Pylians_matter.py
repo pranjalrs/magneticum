@@ -68,10 +68,10 @@ if __name__== '__main__':
 	delta = np.zeros((grid,grid,grid), dtype=np.float32)
 
 	if 'dm' not in sim_name:
-		get_mass_cube([0, 1, 4, 5])
+		get_mass_cube(delta, [0, 1, 4, 5])
 
 	else:
-		get_mass_cube([1, 2])
+		get_mass_cube(delta, [1, 2])
 
 	delta /= np.mean(delta, dtype=np.float64)
 	delta -= 1.0
