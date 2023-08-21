@@ -60,6 +60,7 @@ if __name__== '__main__':
 	# density field parameters
 	grid    = grid   #the 3D field will have grid x grid x grid voxels
 	BoxSize = f.header.BoxSize/1e3 #Mpc/h ; size of box
+	z = f.header.redshift
 	MAS     = args.MAS  #mass-assigment scheme
 	verbose = True   #print information on progress
 	threads = threads
@@ -79,4 +80,4 @@ if __name__== '__main__':
 
 	Pk = PKL.Pk(delta, BoxSize, axis, MAS, verbose)
 
-	np.savetxt(f'../../magneticum-data/data/Pylians/Pk_matter/{sim_box}/Pk_{sim_name}_{MAS}_R{grid}.txt', np.column_stack((Pk.k3D, Pk.Pk[:,0])), delimiter='\t')
+	np.savetxt(f'../../magneticum-data/data/Pylians/Pk_matter/{sim_box}/Pk_{sim_name}_z={z:.2f}_R{grid}.txt', np.column_stack((Pk.k3D, Pk.Pk[:,0])), delimiter='\t')
