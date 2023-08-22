@@ -19,7 +19,6 @@ def get_mass_cube(delta, ptype):
 	pos = []
 	mass = []
 
-	num, denom = 0, 0
 	for i in range(f.header.num_files):
 		this_file = snap_path + str(i)
 
@@ -34,14 +33,10 @@ def get_mass_cube(delta, ptype):
                 
 			pos, mass = pos.astype('float32'), mass.astype('float32')
 
-			num += np.sum(mass)**2
-			denom += np.sum(mass**2)
 			MASL.MA(pos, delta, BoxSize, MAS, W=mass, verbose=verbose)
             
 
 		print(i)
-	Neff = num/denom  # For shot noise computation
-	return Neff
 
 if __name__== '__main__': 
 	args = parser.parse_args()
@@ -76,10 +71,10 @@ if __name__== '__main__':
 	delta = np.zeros((grid,grid,grid), dtype=np.float32)
 
 	if 'dm' not in sim_name:
-		Neff = get_mass_cube(delta, [0, 1, 4, 5])
+		get_mass_cube(delta, [0, 1, 4, 5])
 
 	else:
-		Neff = get_mass_cube(delta, [1, 2])
+		get_mass_cube(delta, [1, 2])
 
 	delta /= np.mean(delta, dtype=np.float64)
 	delta -= 1.0
@@ -87,9 +82,4 @@ if __name__== '__main__':
 
 	Pk = PKL.Pk(delta, BoxSize, axis, MAS, verbose)
 
-	## Compute shot noise
-	shot_noise = BoxSize**3/Neff
-	print(f'Estimated shot noise = {shot_noise:.4f}')
-	new_Pk = Pk.Pk[:,0] - shot_noise
-
-	np.savetxt(f'../../magneticum-data/data/Pylians/Pk_matter/{sim_box}/Pk_{sim_name}_z={z:.2f}_R{grid}.txt', np.column_stack((Pk.k3D, new_Pk)), delimiter='\t')
+	np.savetxt(f'../../magneticum-data/data/Pylians/Pk_matter/{sim_box}/Pk_{sim_name}_z={z:.2f}_R{grid}.txt', np.column_stack((Pk.k3D, Pk.Pk[:, 0)), delimiter='\t')
