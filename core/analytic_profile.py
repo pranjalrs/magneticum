@@ -20,7 +20,6 @@ class Profile():
         ## HMCode
         self.f_H = 0.76
         self.alpha = 0.8471
-        self.HMCode_rescale_A = 1.2989607249999999
         self.M0 = 10**13.5937 * u.Msun/cu.littleh
         self.beta = 0.6
         ## Halo concentration
@@ -215,7 +214,7 @@ class Profile():
         
         if np.any((r_bins < r_min) | (r_bins > r_max)):
             idx = np.where((r_bins < r_min) | (r_bins > r_max))[0][0]
-            raise Exception(f'Radius outside interpolation range of {r_min} - {r_max} R/Rvir!')
+            raise Exception(f'Radius {r_bins[idx]} outside interpolation range of {r_min} - {r_max} R/Rvir!')
 
         this_Pe_profile = this_z_Pe_interp(M, r_bins)
         this_Pe_profile *= self._Pe_prof_interpolator_units
@@ -230,6 +229,38 @@ class Profile():
         else:
             return this_Pe_profile, r_bins
 
+
+    def get_Pe_profile_interpolated2(self, M, z=0, r_bins=None):
+        if '_Pe_prof_interpolator' not in self.__dict__:
+            raise Exception('Attempting to use interpolator without initiliazing! \n Please set ifit to True')
+
+        if r_bins is None:
+            r_bins = np.logspace(np.log10(0.1), np.log10(1), 200)
+
+        this_z_Pe_interp = self._Pe_prof_interpolator[z]
+        m_min, m_max = this_z_Pe_interp.get_knots()[0].min(), this_z_Pe_interp.get_knots()[0].max()
+        r_min, r_max = this_z_Pe_interp.get_knots()[1].min(), this_z_Pe_interp.get_knots()[1].max()
+
+
+        M = M.to(u.Msun/cu.littleh)
+
+        if np.any((M.value < m_min) | (M.value > m_max)):
+            idx = np.where((M.value < m_min) | (M.value > m_max))[0][0]
+            raise Exception(f'''Mass {np.log10(M.value[idx]):.2f} Msun/h is outside the interpolation 
+            range of {np.log10(m_min):.2f} - {np.log10(m_max):.2f} Msun/h!''')
+        
+        if np.any((r_bins < r_min) | (r_bins > r_max)):
+            idx = np.where((r_bins < r_min) | (r_bins > r_max))[0][0]
+            raise Exception(f'Radius outside interpolation range of {r_min} - {r_max} R/Rvir!')
+
+        try:
+            this_Pe_profile = this_z_Pe_interp(M, r_bins)
+            this_Pe_profile *= self._Pe_prof_interpolator_units
+
+        except:
+            pass 
+
+        return this_Pe_profile, r_bins
 
     def get_Pe(self, M, r, z, return_rho=False):
         """Returns the electron pressure based on eq. 40
@@ -395,7 +426,7 @@ class Profile():
         eps2 = self.eps2_0 + self.eps2_1*z
 
         c_M_modified = c_M * (1 + eps1 + (eps2-eps1) * self.get_f_bnd(M)/ (self.omega_b/self.omega_m))
-        c_M_modified = c_M_modified*self.HMCode_rescale_A
+        c_M_modified = c_M_modified
 
         return c_M_modified
 
@@ -436,7 +467,7 @@ class Profile():
         self._Pe_prof_interpolator = {}
         self._rho_prof_interpolator = {}
 
-        r_bins = np.logspace(np.log10(0.09), np.log10(1), 200)
+        r_bins = np.logspace(np.log10(0.009), np.log10(1), 200)
         Mvirs = np.logspace(np.log10(self.mmin), np.log10(self.mmax), 50)*u.Msun/cu.littleh
 
         for z in self.zs:
