@@ -27,7 +27,7 @@ import post_processing
 def update_sigma_intr(val1, val2):
     global sigma_intr_Pe
     global sigma_intr_rho
-
+    
     sigma_intr_Pe = val1
     sigma_intr_rho = val2
 
@@ -74,8 +74,8 @@ def joint_likelihood(x, mass_list, z=0):
 
     ## Get chi2 for Pe
     num = np.log(Pe_sim / Pe_theory.value)**2
-    denom = sigmalnP_sim**2 + sigma_intr_Pe**2
-    chi2 = -0.5*np.sum(num/denom)  # Sum over radial bins
+    denom = sigmalnP_sim**2 + sigma_intr_Pe_init**2
+    chi2 = 0.5*np.sum(num/denom)  # Sum over radial bins
 
 
     # Compute new sigma_intr about the best fit mean
@@ -84,15 +84,14 @@ def joint_likelihood(x, mass_list, z=0):
 
     ## Get chi2 for rho
     num = np.log(rho_sim / rho_theory.value)**2
-    denom = sigmalnrho_sim**2 + sigma_intr_rho**2
+    denom = sigmalnrho_sim**2 + sigma_intr_rho_init**2
     chi2 += 0.5*np.sum(num/denom)  # Sum over radial bins
 
 
     # Compute new sigma_intr about the best fit mean
-    median_prof = np.median(Pe_theory.value, axis=0)
-    update_sigma_rho = np.mean((np.log(Pe_sim)-np.log(median_prof))**2, axis=0)**0.5
-    update_sigma_intr(update_sigma_Pe, update_sigma_rho)
-
+#    median_prof = np.median(Pe_theory.value, axis=0)
+ #   update_sigma_rho = np.mean((np.log(Pe_sim)-np.log(median_prof))**2, axis=0)**0.5
+  #  update_sigma_intr(update_sigma_Pe, update_sigma_rho)
     return -chi2
 
 
@@ -102,8 +101,8 @@ bounds = {'f_H': [0.65, 0.85],
         'log10_M0': [10, 17],
         'M0': [1e10, 1e17],
         'beta': [0.4, 0.8],
-        'eps1_0': [-.8, .8],
-        'eps2_0': [-.8, .8]}
+        'eps1_0': [-3, 3],
+        'eps2_0': [-3, 3]}
 
 fid_val = {'f_H': 0.75,
         'gamma': 1.2,
@@ -135,7 +134,8 @@ test = args.test
 run = args.run
 
 #####-------------- Load Data --------------#####
-files = glob.glob('../../magneticum-data/data/profiles_median/Box1a/Pe_Pe_Mead_Temp_matter_cdm_gas_z=0.00*')
+data_path = '../../magneticum-data/data/profiles_median/Box1a/'
+files = glob.glob(f'{data_path}Pe_Pe_Mead_Temp_matter_cdm_gas_z=0.00_mvir_3.2E+13_1.0E+16.pkl')
 
 ## We will interpolate all measured profiles to the same r_bins as 
 ## the analytical profile for computational efficiency
@@ -169,8 +169,8 @@ for f in files:
         sigmalnP_sim.append(this_sigma_lnP)
     
         #Rescale prof to get intr. scatter
-        idx = np.argmin(np.abs(halo['rvir']-halo['fields']['Pe_Mead'][1]))
-        prof_rescale = (halo['fields']['Pe_Mead'][0] / halo['fields']['Pe_Mead'][0][idx])[mask]
+        rescale_value = np.interp(halo['rvir'], halo['fields']['Pe_Mead'][1], halo['fields']['Pe_Mead'][0])
+        prof_rescale = (halo['fields']['Pe_Mead'][0] / rescale_value)[mask]
 
         Pe_rescale.append(np.interp(r_bins, this_prof_r, prof_rescale))
 
@@ -183,12 +183,11 @@ for f in files:
         this_sigma_lnP = halo['fields']['gas'][3][mask]
 
         rho_sim.append(np.interp(r_bins, this_prof_r, this_prof_field))
-        # r_sim.append(this_prof_r)
         sigmalnrho_sim.append(this_sigma_lnP)
 
         #Rescale prof to get intr. scatter
-        idx = np.argmin(np.abs(halo['rvir']-halo['fields']['gas'][1]))
-        prof_rescale = (halo['fields']['gas'][0] / halo['fields']['gas'][0][idx])[mask]
+        rescale_value = np.interp(halo['rvir'], halo['fields']['gas'][1], halo['fields']['gas'][0])
+        prof_rescale = (halo['fields']['gas'][0] / rescale_value)[mask]
 
         rho_rescale.append(np.interp(r_bins, this_prof_r, prof_rescale))
 
@@ -213,7 +212,7 @@ rho_rescale = np.vstack(rho_rescale)
 median_prof = np.median(rho_rescale, axis=0)
 sigma_intr_rho_init = np.mean((np.log(rho_rescale)-np.log(median_prof))**2, axis=0)**0.5
 
-update_sigma_intr(sigma_intr_Pe_init, sigma_intr_rho_init)
+#update_sigma_intr(sigma_intr_Pe_init, sigma_intr_rho_init)
 
 #####-------------- Prepare for MCMC --------------#####
 fitter = Profile(use_interp=True)
@@ -238,6 +237,8 @@ for i, key in enumerate(fit_par):
 
 if args.field == 'both': use_likelihood = joint_likelihood
 else: use_likelihood = likelihood
+print(f'Using Likelihood: {use_likelihood}')
+
 #####-------------- RUN MCMC --------------#####
 print('Running MCMC..')
 
@@ -263,13 +264,16 @@ if not os.path.exists(save_path):
     os.makedirs(save_path)
 
 walkers = sampler.get_chain()
-chain = sampler.get_chain(discard=int(0.8*nsteps), flat=True)
+np.save(f'{save_path}/all_walkers.npy', walkers)
 
-log_prob_samples = sampler.get_log_prob(discard=int(0.8*nsteps), flat=True)
+chain = sampler.get_chain(flat=True)
+log_prob_samples = sampler.get_log_prob(flat=True)
 
 all_samples = np.concatenate((chain, log_prob_samples[:, None]), axis=1)
-np.savetxt(f'{save_path}/all_samples.txt')
-np.savetxt(f'{save_path}/sigma_intr.txt', np.column_stack((sigma_intr_init, sigma_intr)), header='initial guess \t best fit')
+np.savetxt(f'{save_path}/all_samples.txt', all_samples)
+
+#sigma_data = np.column_stack((sigma_intr_Pe_init, sigma_intr_Pe, sigma_intr_rho_init, sigma_intr_rho))
+#np.savetxt(f'{save_path}/sigma_intr.txt',  sigma_data, header='initial Pe \t final \t initial rho \t final')
 
 
 fig, ax = plt.subplots(len(fit_par), 1, figsize=(10, 1.5*len(fit_par)))
@@ -282,9 +286,10 @@ for i in range(len(fit_par)):
 
 plt.savefig(f'{save_path}/trace_plot.pdf')
 
+#### Discard 0.9*steps and make triangle plot
 plt.figure()
 
-gd_samples = getdist.MCSamples(samples=chain, names=fit_par, labels=par_latex_names)
+gd_samples = getdist.MCSamples(samples=sampler.get_chain(flat=True, discard=int(0.9*nsteps)), names=fit_par, labels=par_latex_names)
 g = plots.get_subplot_plotter()
 g.triangle_plot(gd_samples, axis_marker_lw=2, marker_args={'lw':2}, line_args={'lw':1}, title_limit=2)
 plt.savefig(f'{save_path}/triangle_plot.pdf')
