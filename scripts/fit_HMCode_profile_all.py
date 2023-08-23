@@ -180,10 +180,10 @@ for f in files:
         mask = this_prof_r<1
         this_prof_r = this_prof_r[mask]
         this_prof_field = halo['fields']['gas'][0][mask]
-        this_sigma_lnP = halo['fields']['gas'][3][mask]
+        this_sigma_lnrho = halo['fields']['gas'][3][mask]
 
         rho_sim.append(np.interp(r_bins, this_prof_r, this_prof_field))
-        sigmalnrho_sim.append(this_sigma_lnP)
+        sigmalnrho_sim.append(this_sigma_lnrho)
 
         #Rescale prof to get intr. scatter
         rescale_value = np.interp(halo['rvir'], halo['fields']['gas'][1], halo['fields']['gas'][0])
