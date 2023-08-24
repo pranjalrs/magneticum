@@ -58,10 +58,10 @@ for i, z in enumerate(zs):
     PkR = hr_bao[:, 1]/hr_dm[:, 1]
     k = hr_bao[:, 0]
 
-    logPkRs[:, i] = get_logPkR(PkR, np.log10(k))
+    logPkRs[:, i] = get_logPkR(PkR, k)
 
 # Save as txt file
-c_array_representation = numpy_to_c_array(logPkRs, k_new)
+c_array_representation = numpy_to_c_array(logPkRs, np.log10(k_new))
 
 text_file = open("../../magneticum-data/data/cocoa_logPkR/logPkR_MagWMAP7.txt", "w")
 text_file.write(c_array_representation)
