@@ -25,7 +25,7 @@ def get_logPkR(PkR, k):
 
 def numpy_to_c_array(Pk, k):
     size = k.size
-    c_array = f'static double logk_Bins_MagWMAP7[{len(k_new)}] ='
+    c_array = f'static double logkBins_MagWMAP7[{len(k_new)}] ='
     c_array += '{'
     c_array += ', '.join([str(k[i]) for i in range(size)])
     c_array += '};'
@@ -34,6 +34,7 @@ def numpy_to_c_array(Pk, k):
     rows, cols = Pk.shape
     c_array += '\n '
     c_array += f'static double logPkR_MagWMAP7[{len(k_new)}][{len(zs)}] ='
+    c_array += '{'
 
     for row in range(rows):
         c_array += '{'
@@ -57,7 +58,7 @@ for i, z in enumerate(zs):
     PkR = hr_bao[:, 1]/hr_dm[:, 1]
     k = hr_bao[:, 0]
 
-    logPkRs[:, i] = get_logPkR(PkR, k)
+    logPkRs[:, i] = get_logPkR(PkR, np.log10(k))
 
 # Save as txt file
 c_array_representation = numpy_to_c_array(logPkRs, k_new)
