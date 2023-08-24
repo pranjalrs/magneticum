@@ -16,6 +16,7 @@ sys.path.append('../core/')
 
 from gadget import Gadget
 
+import ipdb
 
 def get_mean_mass_per_particle(Y):
 	"""Calculates mean mass per particle assuming a completely ionized gas (H + He)
@@ -292,24 +293,18 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 		if np.sum([len(mask[this_ptype]) for this_ptype in ptype])!=0:
 			this_bin_field = get_field_for_halo(particle_data, mask, z, little_h, field, r_low, r_up).value
 			n_part = len(this_bin_field)  # No. of particles
-
+			
 			if estimator == 'median':
 				profile[bin_index] = np.median(this_bin_field)
-				sigma_prof[bin_index] = sigma_percentile(this_bin_field)/n_part**0.5
-				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))/n_part**0.5
-
 
 			elif estimator == 'mean':
 				profile[bin_index] = np.mean(this_bin_field)
-				sigma_prof[bin_index] = sigma_percentile(this_bin_field)/n_part**0.5
-
-				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))/n_part**0.5
-
 
 			elif estimator == 'sum':
 				profile[bin_index] = np.sum(this_bin_field)
-				sigma_prof[bin_index] = sigma_percentile(this_bin_field)*n_part**0.5
-				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))*n_part**0.5
+
+			sigma_prof[bin_index] = sigma_percentile(this_bin_field)/n_part**0.5
+			sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))/n_part**0.5
 
 			# Concatenate positions and masses for all ptypes
 			all_part_distance_from_center = []
