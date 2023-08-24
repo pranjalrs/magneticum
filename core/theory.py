@@ -1,16 +1,20 @@
 import numpy as np
 
 import camb
-from classy import Class
+#from classy import Class
 import pyhmcode
 import Pk_library as PKL
 import hmcode  # HMCode-Python
 
-def get_CLASS_Pk(k_sim, input_dict=None, binned=False):
+def get_CLASS_Pk(k_sim, input_dict=None, binned=False, z=0.0):
 	'''Returns Pk for WMAP7 cosmology, optionally a dictionary of cosmo
 	parameters can also be passed
 	'''
 	zmax = 0.1
+
+	if z>0.1:
+		zmax = z + 0.2
+
 	params = {
 		'output': 'mPk', #which quantities we want CLASS to compute
 		'H0':0.704*100, #cosmology paramater
@@ -45,8 +49,8 @@ def get_CLASS_Pk(k_sim, input_dict=None, binned=False):
 	h = cosmo.h() # get reduced Hubble for conversions to 1/Mpc
 	kvec = np.exp(np.linspace(np.log(1.e-3),np.log(10.),Nk))
 	for k in range(Nk):
-		Pnl[k] = cosmo.pk(kvec[k]*h,0.0)*h**3 #using method .pk(k,z), convert to Mpc/h units
-		Plin[k] = cosmo_lin.pk(kvec[k]*h,0.0)*h**3
+		Pnl[k] = cosmo.pk(kvec[k]*h, z)*h**3 #using method .pk(k,z), convert to Mpc/h units
+		Plin[k] = cosmo_lin.pk(kvec[k]*h, z)*h**3
 
 	if binned is True:
 		# Binning
