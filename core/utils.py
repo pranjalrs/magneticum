@@ -332,19 +332,19 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 	return  profile, weighted_bin_center, sigma_prof, sigma_lnprof
 
 
-def get_halo_catalog(group_base, blocks=['GPOS', 'MVIR', 'RVIR', 'M5CC', 'R5CC']):
+def get_halo_catalog(group_base, blocks=['GPOS', 'MVIR', 'RVIR', 'M5CC', 'R5CC'], mmin=1e12):
 	box_name = group_base.split('/')[-3]
 	sim_name = group_base.split('/')[-2]
 	redshift_id = group_base.split('/')[-1].split('_')[-1]
 
 	file_paths = glob.glob(f'{group_base}/sub_{redshift_id}.*')
 	
-	print('Saving only halos with Mvir>1e12Msun/h')
+	print(f'Saving only halos with Mvir>{mmin:.1E} Msun/h')
 	data = {key:[] for key in blocks}
 	with tqdm(total=len(file_paths)) as pbar:
 		for path in file_paths:
 			group_data = g3read.read_new(path, blocks, 0, is_snap=False)
-			idx = np.where(group_data['MVIR']>100)[0]
+			idx = np.where(group_data['MVIR']>mmin/1e10)[0]
 			for item in blocks:
 				data[item].append(group_data[item][idx])
 			pbar.update(1)
@@ -438,6 +438,10 @@ def get_fgas_halo(snap_base, halo_center, radius, z, little_h):
 def get_cosmology_dict_from_path(path):
 	if 'mr_bao' in path or 'hr_bao' in path or 'mr_dm' in path:
 		Om0, Ob0, sigma8, h = 0.272, 0.0456, 0.809, 0.704
+
+	elif 'hr' in path:
+		cosmo_pars = re.findall(r'hr_(\d+\.\d+)_(\d+\.\d+)_(\d+\.\d+)_(\d+\.\d+)', path)[0]
+		Om0, Ob0, sigma8, h = np.array(cosmo_pars, dtype=float)
 
 	else:
 		cosmo_pars = re.findall(r'mr_(\d+\.\d+)_(\d+\.\d+)_(\d+\.\d+)_(\d+\.\d+)', path)[0]

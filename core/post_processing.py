@@ -4,6 +4,8 @@ Functions for post-processing data from simulations
 import numpy as np
 import scipy.interpolate
 
+import ipdb
+
 def get_mean_profile(halo_data, field, scaling='r500c'):
 
 	profile = []
@@ -55,17 +57,22 @@ def get_mean_profile_all_fields(halo_data, r_over_Rvir_bins=None, r_name='rvir',
 	for field in fields:
 		all_profiles = np.array([halo['fields'][field][0] for halo in halo_data])
 		all_r_bins = np.array([halo['fields'][field][1] for halo in halo_data])
+		try:
+			all_sigma = np.array([halo['fields'][field][2] for halo in halo_data])
+		except:
+			all_sigma = np.array([np.zeros_like(halo['fields'][field][1]) for halo in halo_data])
+
 		all_rvir = np.array([halo[r_name] for halo in halo_data])
 
-		mean_prof, mean_r, std, lnstd = get_mean_profile_one_field(all_profiles, all_r_bins, all_rvir, r_over_Rvir_bins, rescale)
+		mean_prof, std, lnstd = get_mean_profile_one_field(all_profiles, all_r_bins, all_sigma, all_rvir, r_over_Rvir_bins, rescale)
 		mean_profile_dict[field][0] = mean_prof
-		mean_profile_dict[field][1] = mean_r
+		mean_profile_dict[field][1] = r_over_Rvir_bins
 		mean_profile_dict[field][2] = std
 		mean_profile_dict[field][3] = lnstd
 
 	return mean_profile_dict
 
-def get_mean_profile_one_field(profiles, r_bins, rvir, r_over_Rvir_bins, rescale):
+def get_mean_profile_one_field(profiles, r_bins, sigmas, rvir, r_over_Rvir_bins, rescale):
 	rescaled_profiles = []
 	rescaled_r_bins = []
 
@@ -73,11 +80,11 @@ def get_mean_profile_one_field(profiles, r_bins, rvir, r_over_Rvir_bins, rescale
 		this_profile = profiles[i]
 		this_r_bins = r_bins[i]
 		this_rvir = rvir[i]
-		
+
 		# Create interpolator
 		this_rscale = this_r_bins/this_rvir
 		get_profile_interp = scipy.interpolate.interp1d(this_rscale, this_profile)
-        
+
 		if rescale is True:
 			this_rescaled_profile = get_profile_interp(r_over_Rvir_bins)/get_profile_interp(1.)
 
@@ -90,8 +97,10 @@ def get_mean_profile_one_field(profiles, r_bins, rvir, r_over_Rvir_bins, rescale
 
 	rescaled_profiles = np.array(rescaled_profiles)
 	rescaled_r_bins = np.array(rescaled_r_bins)
-	
-	mean_profile, mean_r_bins = np.mean(rescaled_profiles, axis=0), np.mean(rescaled_r_bins, axis=0), 
-	std = np.std(rescaled_profiles, axis=0), 
+
+# 	ipdb.set_trace()
+	mean_profile = np.mean(rescaled_profiles, axis=0)
+	std = np.mean(sigmas**2, axis=0)
 	log_std = np.std(np.log(rescaled_profiles), where=~np.isinf(np.log(rescaled_profiles)), axis=0)
-	return mean_profile, mean_r_bins, std, log_std
+
+	return mean_profile, std, log_std
