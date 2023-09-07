@@ -101,8 +101,8 @@ bounds = {'f_H': [0.65, 0.85],
         'log10_M0': [10, 17],
         'M0': [1e10, 1e17],
         'beta': [0.4, 0.8],
-        'eps1_0': [-3, 3],
-        'eps2_0': [-3, 3]}
+        'eps1_0': [-1, 3],
+        'eps2_0': [-1, 3]}
 
 fid_val = {'f_H': 0.75,
         'gamma': 1.2,
@@ -119,8 +119,8 @@ std_dev = {'f_H': 0.2,
         'log10_M0': 2,
         'M0': 1e12,
         'beta': 0.2,
-        'eps1_0': 0.02,
-        'eps2_0': 0.02}
+        'eps1_0': 0.2,
+        'eps2_0': 0.2}
 
 #####-------------- Parse Args --------------#####
 
@@ -300,35 +300,28 @@ c = ['r', 'b', 'g', 'k']
 bins = [13.5, 14, 14.5, 15]
 # Fiducial HMCode profiles
 fitter.update_param(fit_par, gd_samples.getMeans())
+Pe_bestfit, rho_bestfit, r_bestfit = fitter.get_Pe_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0, return_rho=True)
 
-# Randomly pick 5 profiles
-nhalo = 5
-inds = np.random.choice(Mvir_sim, nhalo, replace=False)
-Pe_bestfit, r_bestfit = fitter.get_Pe_profile_interpolated(Mvir_sim[inds]*u.Msun/cu.littleh, z=0)
 
-plt.figure(figsize=(7, 5))
+## Plot median Pe profiles
+plt.figure(figsize=(10, 6))
+plt.loglog(r_bins, np.median(Pe_sim, axis=0), label='Median sim prof')
+plt.loglog(r_bestfit, np.median(Pe_bestfit, axis=0), label='Median theory prof')
 
-lines = [None]*(len(nhalo)+1)
 
-for i, j in zip(range(nhalo), inds):
-    bin_label = f'{(bins[i]):.1f}$\leq\log$M$_{{vir}}<${(bins[i+1]):.1f}'
-    plt.plot(r_bestfit[i], Pe_bestfit[i].value, c=c[i], ls='--')
-    lines[i] = plt.errorbar(r_sim[j], Pe_sim[j], yerr=sigmaP_sim[j], c=c[i], label=f'log10 M = {np.log10(Mvir_sim[j]):.3f}')
-    
+plt.ylabel('$P_e$')
+plt.xlabel('$r/Rvir$')
+plt.legend()
+plt.savefig(f'{save_path}/best_fit_Pe.pdf')
 
-plt.xscale('log')
-plt.yscale('log')
 
-lines[i+1], = plt.loglog([], [], '--', c='k', label='Best Fit')
+## Plot median rho profiles
+plt.figure(figsize=(10, 6))
+plt.loglog(r_bins, np.median(rho_sim, axis=0), label='Median sim prof')
+plt.loglog(r_bestfit, np.median(rho_bestfit, axis=0), label='Median theory prof')
 
-legend1 = plt.legend(handles=lines, title='Box1a', fontsize=12, frameon=False)
-# legend2 = plt.legend(handles=line_analytic, labels=['Best Fit'], fontsize=12, frameon=False, loc='lower center')
 
-plt.gca().add_artist(legend1)
-# plt.gca().add_artist(legend1)
-
-plt.xlabel('$r/R_{\mathrm{vir}}$')
-plt.ylabel('$P_e$ [keV/cm$^3$]');
-
-plt.ylim([2e-6, 1.2e-2])
-plt.savefig(f'{save_path}/best_fit.pdf')
+plt.ylabel('$\\rho_{gas}$')
+plt.xlabel('$r/Rvir$')
+plt.legend()
+plt.savefig(f'{save_path}/best_fit_rho.pdf')
