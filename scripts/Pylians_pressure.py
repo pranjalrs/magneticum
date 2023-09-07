@@ -24,10 +24,10 @@ parser.add_argument('--save_cube', default=False, type=bool)
 parser.add_argument('--save_Pk', default=True, type=bool)
 parser.add_argument('--Pe', type=str)
 
-def get_Pe_cube(Pe_cube, norm, z, little_h, ptype=0):
+def get_Pe_cube(Pe_cube, norm, little_h, ptype=0):
 	for i in range(f.header.num_files):
 		this_snap = g3read.GadgetFile(snap_path + str(i))
-		Pe = Pk_tools.get_field(ptype, this_snap, 'Pe', z=z, little_h=little_h)
+		Pe = Pk_tools.get_field(ptype, this_snap, 'Pe', little_h=little_h)
 		pos = this_snap.read_new('POS ', ptype)*1e-3
 		m_over_rho = np.array(this_snap.read_new('MASS', ptype))/np.array(this_snap.read_new('RHO ', ptype))
 
@@ -39,11 +39,11 @@ def get_Pe_cube(Pe_cube, norm, z, little_h, ptype=0):
 		print(i)
 
 
-def get_Pe_Mead_cube(Pe_cube, z, little_h, ptype=0):
+def get_Pe_Mead_cube(Pe_cube, little_h, ptype=0):
 	cell_volume = (BoxSize*u.Mpc/grid)**3
 	for i in range(f.header.num_files):
 		this_snap = g3read.GadgetFile(snap_path + str(i))
-		Pe = Pk_tools.get_field(ptype, this_snap, 'Pe_Mead', z, little_h, cell_volume)
+		Pe = Pk_tools.get_field(ptype, this_snap, 'Pe_Mead', little_h, cell_volume)
 		pos = this_snap.read_new('POS ', ptype)*1e-3
 
 
