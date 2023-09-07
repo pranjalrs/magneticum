@@ -302,9 +302,14 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 
 			elif estimator == 'sum':
 				profile[bin_index] = np.sum(this_bin_field)
-
-			sigma_prof[bin_index] = sigma_percentile(this_bin_field)/n_part**0.5
-			sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))/n_part**0.5
+			
+			try:
+				sigma_prof[bin_index] = sigma_percentile(this_bin_field)/n_part**0.5
+				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))/n_part**0.5
+			except:
+				sigma_prof[bin_index] = 0
+				sigma_lnprof[bin_index] = 0
+				
 
 			# Concatenate positions and masses for all ptypes
 			all_part_distance_from_center = []
