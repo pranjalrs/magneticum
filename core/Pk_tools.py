@@ -6,7 +6,7 @@ from tqdm import tqdm
 import sys
 sys.path.append('../core/')
 
-from utils import get_physical_electron_pressure, get_physical_electron_pressure_Mead
+from utils import get_comoving_electron_pressure, get_comoving_electron_pressure_Mead
 
 # GADGET-2 Units: https://wwwmpa.mpa-garching.mpg.de/gadget/users-guide.pdf
 vel_units = 1.0  # km/s
@@ -16,7 +16,7 @@ mass_units = 1e10  # Msun/h
 units_dict = {'POS ': 1e-3, 'MASS':1e10, 'BHMA':1e10}
 
 
-def get_field(ptype, snapshot, field_name, z, little_h, cell_volume=None):
+def get_field(ptype, snapshot, field_name, little_h, cell_volume=None):
 	"""_summary_
 
 	Parameters
@@ -27,6 +27,9 @@ def get_field(ptype, snapshot, field_name, z, little_h, cell_volume=None):
 		Snapshot file read using g3read
 	field_name : str
 		Field name
+	
+	cell_volume : astropy.units
+		should be in length**3/h**3
 
 	Returns
 	-------
@@ -40,7 +43,7 @@ def get_field(ptype, snapshot, field_name, z, little_h, cell_volume=None):
 		Temp = snapshot.read_new('TEMP', ptypes=0)
 		Y = snapshot.read_new('Zs  ', ptypes=0)[:, 0]
 
-		return get_physical_electron_pressure(rho, Temp, Y, z, little_h).value
+		return get_comoving_electron_pressure(rho, Temp, Y).value * little_h**2
 
 	elif field_name == 'rho':
 		rho = snapshot.read_new('RHO ', ptypes=0)
@@ -53,7 +56,7 @@ def get_field(ptype, snapshot, field_name, z, little_h, cell_volume=None):
 		Temp = snapshot.read_new('TEMP', ptypes=0)
 		Y = snapshot.read_new('Zs  ', ptypes=0)[:, 0]
 
-		return get_physical_electron_pressure_Mead(mass, Temp, Y, cell_volume, z, little_h).value
+		return get_comoving_electron_pressure_Mead(mass, Temp, Y, cell_volume).value * little_h**2
 
 	else:
 		return snapshot.read_new(field_name, ptype)*units_dict[field_name]
