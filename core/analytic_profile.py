@@ -287,12 +287,12 @@ class Profile():
         rho_bnd = self.get_rho_bnd(M, r, r_virial=r_virial, c_M=c_M, z=z)
         Temp_g = self.get_Temp_g(M, r, r_virial=r_virial, c_M=c_M, z=z)
         P_e = rho_bnd * const.k_B*Temp_g/const.m_p/self.mu_e
-        
+
         P_e = P_e.to(u.keV/u.cm**3, cu.with_H0(self.H0))
 
         if return_rho is True:
             return P_e, rho_bnd.to(u.g/u.cm**3, cu.with_H0(self.H0)).to(u.GeV/u.cm**3, u.mass_energy())
-        
+
         else:
             return P_e
 
@@ -300,7 +300,7 @@ class Profile():
         rho_bnd = self._get_rho_bnd_wrapper(M, r, r_virial=r_virial, c_M=c_M)
 
         norm = self.get_norm(self._get_rho_bnd_wrapper, M, r_virial=r_virial, c_M=c_M)
-        
+
         return rho_bnd*self.get_f_bnd(M)*M / norm
 
 
@@ -347,7 +347,7 @@ class Profile():
         # elif irho == 2:
         #     gamma_prime = params['gamma_0']*m**params['gamma_1']
         #     beta_prime = params['beta_0']*m**params['beta_1']
-            
+
         #     num = c_M**gamma_prime * (1 + c_M**params['eta'])**((beta_prime-gamma_prime)/params['eta'])
         #     denom = (c_M*x)**gamma_prime * (1 + (c_M*x)**params['eta'])**((beta_prime-gamma_prime)/params['eta'])
 
@@ -424,6 +424,12 @@ class Profile():
 
         eps1 = self.eps1_0 + self.eps1_1*z
         eps2 = self.eps2_0 + self.eps2_1*z
+
+        if eps1<= -1: 
+            raise ValueError("eps1<-1 concentration for low mass halos is negative!")
+
+        if eps2<= -1: 
+            raise ValueError("eps2<-1 concentration for high mass halos is negative!")
 
         c_M_modified = c_M * (1 + eps1 + (eps2-eps1) * self.get_f_bnd(M)/ (self.omega_b/self.omega_m))
         c_M_modified = c_M_modified
