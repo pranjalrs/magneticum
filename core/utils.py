@@ -35,17 +35,13 @@ def get_mean_mass_per_particle(Y):
 	return 1/(2*(1-Y) + 3/4*Y)
 
 
-def get_physical_density_in_spherical_shell(mass, r1, r2, z, little_h):
+def get_physical_density_in_spherical_shell(mass, volume, z, little_h):
 	"""Calculates dark matter density in physical units by
 	summing total mass and dividing by the shell volume
 	"""
 	mass = mass*Gadget.units.mass
 
-	assert r1 < r2, "r1 must be smaller than r2 "
-	r1, r2 = r1*Gadget.units.length, r2*Gadget.units.length
-	total_volume = 4*np.pi/3 * (r2**3 - r1**3)
-
-	comoving_density = mass/total_volume
+	comoving_density = mass/volume
 	physical_density = comoving_density*Gadget.convert.density_to_physical(z, little_h)
 	return physical_density.to(u.GeV/u.cm**3, u.mass_energy())
 
@@ -77,28 +73,26 @@ def get_comoving_electron_pressure(rho, Temp, Y):
 	mu = get_mean_mass_per_particle(Y)
 	ngas = rho/(mu*constants.m_p)
 	P_thermal = ngas*constants.k_B*Temp
-	Pe = ((4-2*Y)/(8-5*Y)*P_thermal).to(u.keV/u.cm**3)  # In comoving keV/cm^3
+	Pe = ((4-2*Y)/(8-5*Y)*P_thermal).to(u.keV/u.cm**3)  # In comoving keV/cm^3 h^2
 
 	return Pe
 
-def get_comoving_electron_pressure_Mead(mass, Temp, Y, r1, r2):
-	assert r1 < r2, "r1 must be smaller than r2 "
-	r1, r2 = r1*Gadget.units.length, r2*Gadget.units.length
-	shell_volume = 4*np.pi/3 * (r2**3 - r1**3)
+def get_comoving_electron_pressure_Mead(mass, Temp, Y, volume):
+
 
 	Temp = Temp * Gadget.units.Temperature
 	mass = mass * Gadget.units.mass
 	mu_e = 2/(2-Y) # Mean mass per electron
 	Ne = mass/constants.m_p/mu_e  # No. of electrons
-	Pe = Ne*constants.k_B*Temp/shell_volume
+	Pe = Ne*constants.k_B*Temp/volume
 
 	Pe = Pe.to(u.keV/u.cm**3)
 
 	return Pe
 
 
-def get_physical_electron_pressure_Mead(mass, Temp, Y, r1, r2, z, little_h):
-	comoving_Pe = get_comoving_electron_pressure_Mead(mass, Temp, Y, r1, r2)
+def get_physical_electron_pressure_Mead(mass, Temp, Y, volume, z, little_h):
+	comoving_Pe = get_comoving_electron_pressure_Mead(mass, Temp, Y, volume)
 	physical_Pe = comoving_Pe* Gadget.convert.pressure_to_physical(z, little_h)
 
 	return physical_Pe
@@ -153,6 +147,10 @@ def get_field_for_halo(particle_data, mask, z, little_h, field, r1=None, r2=None
 	list
 		List of field values
 	"""
+	if r1 is not None and r2 is not None:
+		assert r1 < r2, "r1 must be smaller than r2 "
+		r1, r2 = r1*Gadget.units.length, r2*Gadget.units.length
+		shell_volume = 4*np.pi/3 * (r2**3 - r1**3)  # in (kpc/h)**3
 
 	if field == 'Pe':
 		rho = particle_data[0]['RHO '][mask[0]]
@@ -167,7 +165,7 @@ def get_field_for_halo(particle_data, mask, z, little_h, field, r1=None, r2=None
 		Temp = particle_data[0]['TEMP'][mask[0]]
 		Y = particle_data[0]['Zs  '][mask[0]][:, 0]  # Helium Fraction
 		
-		Pe_physical = get_physical_electron_pressure_Mead(mass, Temp, Y, r1, r2, z, little_h)
+		Pe_physical = get_physical_electron_pressure_Mead(mass, Temp, Y, shell_volume, z, little_h)
 		return Pe_physical
 
 	if field == "Temp":
@@ -175,19 +173,19 @@ def get_field_for_halo(particle_data, mask, z, little_h, field, r1=None, r2=None
 		return Temp
 
 	if field=="cdm":
-		rho_cdm = get_physical_density_in_spherical_shell(particle_data[1]['MASS'][mask[1]], r1, r2, z, little_h)
+		rho_cdm = get_physical_density_in_spherical_shell(particle_data[1]['MASS'][mask[1]], shell_volume, z, little_h)
 		return rho_cdm
 
 	if field=="gas":
-		rho_gas = get_physical_density_in_spherical_shell(particle_data[0]['MASS'][mask[0]], r1, r2, z, little_h)
+		rho_gas = get_physical_density_in_spherical_shell(particle_data[0]['MASS'][mask[0]], shell_volume, z, little_h)
 		return rho_gas
 
 	if field=="matter":
-		rho_gas = get_physical_density_in_spherical_shell(particle_data[0]['MASS'][mask[0]], r1, r2, z, little_h)
-		rho_cdm = get_physical_density_in_spherical_shell(particle_data[1]['MASS'][mask[1]], r1, r2, z, little_h)
+		rho_gas = get_physical_density_in_spherical_shell(particle_data[0]['MASS'][mask[0]], shell_volume, z, little_h)
+		rho_cdm = get_physical_density_in_spherical_shell(particle_data[1]['MASS'][mask[1]], shell_volume, z, little_h)
 
 		try:
-			rho_star = get_physical_density_in_spherical_shell(particle_data[4]['MASS'][mask[4]], r1, r2, z, little_h)
+			rho_star = get_physical_density_in_spherical_shell(particle_data[4]['MASS'][mask[4]], shell_volume, z, little_h)
 		except:
 			rho_star = []
 		return np.concatenate((rho_gas, rho_star, rho_cdm))

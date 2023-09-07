@@ -48,7 +48,7 @@ def get_mean_profile_all_fields(halo_data, r_over_Rvir_bins=None, r_name='rvir',
 		mean_profile, r bins, sigma ln(profile), sigma profile
 	"""
 	if r_over_Rvir_bins is None:
-		r_over_Rvir_bins = np.logspace(np.log10(0.12), np.log10(2), 30)
+		r_over_Rvir_bins = np.logspace(np.log10(0.11), np.log10(2.7), 30)
 
 	fields = halo_data[0]['fields'].keys()
 
