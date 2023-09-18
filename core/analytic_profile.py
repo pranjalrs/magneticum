@@ -166,7 +166,7 @@ class Profile():
 
         this_profile = self.get_Pe(M, r_bins*rvir, z=z, return_rho=return_rho, return_Temp=return_Temp)
         
-        return this_profile + (r_bins,)
+        return this_profile, r_bins
 
 
     def get_Pe_profile_interpolated(self, M, z=0, r_bins=None, return_rho=False, return_Temp=False):
@@ -235,7 +235,7 @@ class Profile():
 
             return_profiles += (this_Temp_profile,)
 
-        return return_profiles + (r_bins,)
+        return return_profiles, r_bins
 
 
     def get_Pe_profile_interpolated2(self, M, z=0, r_bins=None):
@@ -352,9 +352,9 @@ class Profile():
             gamma = params['gamma']
             return np.power((np.log(1+x) / x ), 1/(gamma-1) )
 
-        # elif irho == 1:
-        #     gamma = params['gamma']*m**params['a']  # Scaling gamma with mass
-        #     return (np.log(1+x) / x )**(1/(gamma-1))
+        elif irho == 1:
+            gamma = params['gamma']*m**params['a']  # Scaling gamma with mass
+            return (np.log(1+x) / x )**(1/(gamma-1))
 
         # elif irho == 2:
         #     gamma_prime = params['gamma_0']*m**params['gamma_1']
@@ -387,7 +387,7 @@ class Profile():
         elif self.irho == 2:
             f_r = 1
 
-        return T_v * f_r    
+        return T_v * (f_r)**(1/(self.gamma_T-1))
 
 
     def _get_Temp_virial(self, M, r_virial, z):
