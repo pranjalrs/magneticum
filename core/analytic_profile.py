@@ -26,6 +26,7 @@ class Profile():
         # epsilon1 = epsilon1_0 + epsilon1_1 * z
         self.eps1_0, self.eps1_1 = -0.1065, -0.1073
         self.eps2_0, self.eps2_1 = 0., 0.
+        self.HMcode_rescale_A = 1#1.2989607249999999
 
         ## For irho = 0
         self.gamma = 1.177  # Polytropic index for bound gas profile
@@ -65,7 +66,7 @@ class Profile():
         info = ""
         irho_dict = {0:'default HMCode', 1:'mass dependent gamma', 2:'e-GNFW'}
         cosmo_pars = ['omega_m', 'omega_b', 'h']
-        global_halo_pars = ['f_H', 'alpha', 'HMCode_rescale_A', 'M0', 'beta',
+        global_halo_pars = ['f_H', 'alpha', 'HMcode_rescale_A', 'M0', 'beta',
                             'eps1_0', 'eps1_1', 'eps2_0', 'eps2_1']
         prof_halo_pars = {0: ['gamma'],
                         1: ['gamma', 'a'],
@@ -432,7 +433,7 @@ class Profile():
             raise ValueError("eps2<-1 concentration for high mass halos is negative!")
 
         c_M_modified = c_M * (1 + eps1 + (eps2-eps1) * self.get_f_bnd(M)/ (self.omega_b/self.omega_m))
-        c_M_modified = c_M_modified
+        c_M_modified = c_M_modified*self.HMcode_rescale_A
 
         return c_M_modified
 
