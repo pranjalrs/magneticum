@@ -8,6 +8,7 @@ import argparse
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.ma as ma
 from scipy.interpolate import interp1d
 from schwimmbad import MPIPool
 
@@ -23,6 +24,35 @@ sys.path.append('../core/')
 
 from analytic_profile import Profile
 import post_processing
+
+#####-------------- Parse Args --------------#####
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--field', default='Pe', type=str)
+parser.add_argument('--test', type=bool, default=False)
+parser.add_argument('--run', type=int)
+parser.add_argument('--nsteps', type=int)
+args = parser.parse_args()
+test = args.test
+run = args.run
+
+#####-------------- Likelihood --------------#####
+
+def nan_interp(x, y):
+    idx = ((np.isnan(y)) | (y==0))
+    return interp1d(x[~idx], y[~idx], kind='cubic', bounds_error=False, fill_value=0)
+
+def get_scatter(x, xbar):
+    # Calculate for radial bin at a time
+    std  = []
+    for i in range(x.shape[1]):
+        this_column = x[:, i]
+        idx = (this_column>0) & (np.isfinite(this_column))
+        this_column = this_column[idx]
+#         std.append(np.mean((this_column-xbar[i])**2)**0.5)
+        std.append((np.percentile(this_column-xbar[i], 84, axis=0) - np.percentile(this_column-xbar[i], 16, axis=0))/2)
+
+    return np.array(std)
 
 def update_sigma_intr(val1, val2):
     global sigma_intr_Pe
@@ -46,8 +76,13 @@ def likelihood(x, mass_list, z=0):
 
     chi2 = 0 
 
-    num = np.log(Pe_sim / Pe_theory.value)**2
-    denom = sigmalnP_sim**2 + sigma_intr_Pe**2
+    ## Get chi2 for Pe
+    num = np.log(Pe_sim[mask_low_mass] / Pe_theory.value[mask_low_mass])**2
+    denom = sigma_intr_Pe_init_high_mass**2 #+ sigmalnP_sim**2
+    chi2 = 0.5*np.sum(num/denom)  # Sum over radial bins
+    
+    num = np.log(Pe_sim[~mask_low_mass] / Pe_theory.value[~mask_low_mass])**2
+    denom = sigma_intr_Pe_init_low_mass**2 #+ sigmalnP_sim**2
     chi2 = 0.5*np.sum(num/denom)  # Sum over radial bins
     
     # Compute new sigma_intr about the best fit mean
@@ -68,23 +103,35 @@ def joint_likelihood(x, mass_list, z=0):
 
     mvir = mass_list*u.Msun/cu.littleh
     ## Get profile for each halo
-    Pe_theory, rho_theory, r = fitter.get_Pe_profile_interpolated(mvir, r_bins=r_bins, z=z, return_rho=True)
+    (Pe_theory, rho_theory), r = fitter.get_Pe_profile_interpolated(mvir, r_bins=r_bins, z=z, return_rho=True)
 
     chi2 = 0 
 
     ## Get chi2 for Pe
-    num = np.log(Pe_sim / Pe_theory.value)**2
-    denom = sigmalnP_sim**2 + sigma_intr_Pe_init**2
+    num = np.log(Pe_sim[mask_low_mass] / Pe_theory.value[mask_low_mass])**2
+    denom = sigma_intr_Pe_init_high_mass**2 #+ sigmalnP_sim**2
+    chi2 = 0.5*np.sum(num/denom)  # Sum over radial bins
+    
+    idx = Pe_sim[~mask_low_mass] ==0
+    num = np.log(Pe_sim[~mask_low_mass] / Pe_theory.value[~mask_low_mass])**2
+    denom = sigma_intr_Pe_init_low_mass**2 #+ sigmalnP_sim**2
+    num = ma.array(num, mask=idx, fill_value=0)
     chi2 = 0.5*np.sum(num/denom)  # Sum over radial bins
 
 
     # Compute new sigma_intr about the best fit mean
-    median_prof = np.median(Pe_theory.value, axis=0)
-    update_sigma_Pe = np.mean((np.log(Pe_sim)-np.log(median_prof))**2, axis=0)**0.5
+#     median_prof = np.median(Pe_theory.value, axis=0)
+#     update_sigma_Pe = np.mean((np.log(Pe_sim)-np.log(median_prof))**2, axis=0)**0.5
 
     ## Get chi2 for rho
-    num = np.log(rho_sim / rho_theory.value)**2
-    denom = sigmalnrho_sim**2 + sigma_intr_rho_init**2
+    num = np.log(rho_sim[mask_low_mass] / rho_theory.value[mask_low_mass])**2
+    denom = sigma_intr_rho_init_high_mass**2 #+ sigmalnrho_sim**2
+    chi2 += 0.5*np.sum(num/denom)  # Sum over radial bins
+    
+    idx = rho_sim[~mask_low_mass] ==0
+    num = np.log(rho_sim[~mask_low_mass] / rho_theory.value[~mask_low_mass])**2
+    num = ma.array(num, mask=idx, fill_value=0)
+    denom = sigma_intr_rho_init_low_mass**2 #+ sigmalnrho_sim**2
     chi2 += 0.5*np.sum(num/denom)  # Sum over radial bins
 
 
@@ -101,8 +148,9 @@ bounds = {'f_H': [0.65, 0.85],
         'log10_M0': [10, 17],
         'M0': [1e10, 1e17],
         'beta': [0.4, 0.8],
-        'eps1_0': [-1, 3],
-        'eps2_0': [-1, 3]}
+        'eps1_0': [-0.95, 3],
+        'eps2_0': [-0.95, 3],
+	'gamma_T': [1.1, 5]}
 
 fid_val = {'f_H': 0.75,
         'gamma': 1.2,
@@ -111,7 +159,8 @@ fid_val = {'f_H': 0.75,
         'M0': 1e14,
         'beta': 0.6,
         'eps1_0': 0.2,
-        'eps2_0': -0.1}
+        'eps2_0': -0.1,
+	'gamma_T': 2}
 
 std_dev = {'f_H': 0.2,
         'gamma': 0.2,
@@ -120,22 +169,14 @@ std_dev = {'f_H': 0.2,
         'M0': 1e12,
         'beta': 0.2,
         'eps1_0': 0.2,
-        'eps2_0': 0.2}
+        'eps2_0': 0.2,
+	'gamma_T':0.2}
 
-#####-------------- Parse Args --------------#####
-
-parser = argparse.ArgumentParser()
-parser.add_argument('--field', default='Pe', type=str)
-parser.add_argument('--test', type=bool, default=False)
-parser.add_argument('--run', type=int)
-parser.add_argument('--nsteps', type=int)
-args = parser.parse_args()
-test = args.test
-run = args.run
 
 #####-------------- Load Data --------------#####
-data_path = '../../magneticum-data/data/profiles_median/Box1a/'
-files = glob.glob(f'{data_path}Pe_Pe_Mead_Temp_matter_cdm_gas_z=0.00_mvir_3.2E+13_1.0E+16.pkl')
+data_path = '../../magneticum-data/data/profiles_median'
+files = glob.glob(f'{data_path}/Box1a/Pe_Pe_Mead_Temp_matter_cdm_gas_z=0.00_mvir_3.2E+13_1.0E+16.pkl')
+files += glob.glob(f'{data_path}/Box2/Pe_Pe_Mead_Temp_matter_cdm_gas_z=0.00_mvir_1.0E+11_1.0E+13.pkl')
 
 ## We will interpolate all measured profiles to the same r_bins as 
 ## the analytical profile for computational efficiency
@@ -143,6 +184,9 @@ Pe_sim= []
 rho_sim= []
 
 # r_sim = []
+sigmaP_sim = []
+sigmarho_sim = []
+
 sigmalnP_sim = []
 sigmalnrho_sim = []
 
@@ -152,72 +196,97 @@ Mvir_sim = []
 Pe_rescale = []
 rho_rescale = []
 
-r_bins = np.logspace(np.log10(0.1), np.log10(1), 20)
+r_bins = np.logspace(np.log10(0.15), np.log10(1), 20)
+
 
 for f in files:
     this_prof_data = joblib.load(f)
     
     for halo in this_prof_data:
         this_prof_r = halo['fields']['Pe_Mead'][1]/halo['rvir']
-        mask = this_prof_r<1
-        this_prof_r = this_prof_r[mask]
-        this_prof_field = halo['fields']['Pe_Mead'][0][mask]
-        this_sigma_lnP = halo['fields']['Pe'][3][mask]
+        this_prof_field = halo['fields']['Pe_Mead'][0]
+        this_sigma_lnP = halo['fields']['Pe'][3]
 
-        Pe_sim.append(np.interp(r_bins, this_prof_r, this_prof_field))
-        # r_sim.append(this_prof_r)
-        sigmalnP_sim.append(this_sigma_lnP)
-    
         #Rescale prof to get intr. scatter
-        rescale_value = np.interp(halo['rvir'], halo['fields']['Pe_Mead'][1], halo['fields']['Pe_Mead'][0])
-        prof_rescale = (halo['fields']['Pe_Mead'][0] / rescale_value)[mask]
+        rescale_value = nan_interp(this_prof_r, this_prof_field)(1)
+        prof_rescale = (this_prof_field/ rescale_value)
+        Pe_prof_interp = nan_interp(this_prof_r, this_prof_field)(r_bins)
+        Pe_rescale_interp = nan_interp(this_prof_r, prof_rescale)(r_bins)
 
-        Pe_rescale.append(np.interp(r_bins, this_prof_r, prof_rescale))
-
+        if np.any(prof_rescale<0) or np.any(Pe_prof_interp<0) or np.all(np.log(prof_rescale)<0):
+            continue
 
         #### Now do same things for rho
         this_prof_r = halo['fields']['gas'][1]/halo['rvir']
-        mask = this_prof_r<1
-        this_prof_r = this_prof_r[mask]
-        this_prof_field = halo['fields']['gas'][0][mask]
-        this_sigma_lnrho = halo['fields']['gas'][3][mask]
-
-        rho_sim.append(np.interp(r_bins, this_prof_r, this_prof_field))
-        sigmalnrho_sim.append(this_sigma_lnrho)
+        this_prof_r = this_prof_r
+        this_prof_field = halo['fields']['gas'][0]
+        this_sigma_lnrho = halo['fields']['gas'][3]
+                          
 
         #Rescale prof to get intr. scatter
-        rescale_value = np.interp(halo['rvir'], halo['fields']['gas'][1], halo['fields']['gas'][0])
-        prof_rescale = (halo['fields']['gas'][0] / rescale_value)[mask]
+        rescale_value = nan_interp(halo['fields']['gas'][1], halo['fields']['gas'][0])(halo['rvir'])
+        prof_rescale = (halo['fields']['gas'][0] / rescale_value)
+        rho_prof_interp = nan_interp(this_prof_r, this_prof_field)(r_bins)
+        rho_rescale_interp = nan_interp(this_prof_r, prof_rescale)(r_bins)
+        
+        if np.any(prof_rescale<0) or np.any(rho_prof_interp<0) or np.all(np.log(prof_rescale)<0):
+            continue
 
-        rho_rescale.append(np.interp(r_bins, this_prof_r, prof_rescale))
 
-    Mvir_sim.append(this_prof_data['mvir'])
+        Pe_sim.append(Pe_prof_interp)
+        Pe_rescale.append(Pe_rescale_interp)
+        
+        rho_sim.append(rho_prof_interp)
+        rho_rescale.append(rho_rescale_interp)
+    
+    
+        Mvir_sim.append(halo['mvir'])
 
 # Now we need to sort halos in order of increasing mass
 # Since this is what the scipy interpolator expects
-Mvir_sim = np.concatenate(Mvir_sim, dtype='float32')
+Mvir_sim = np.array(Mvir_sim, dtype='float32')
 sorting_indices = np.argsort(Mvir_sim)
 
 Pe_sim = np.array(Pe_sim, dtype='float32')[sorting_indices]
-sigmalnP_sim = np.array(sigmalnP_sim, dtype='float32')[sorting_indices]
+# sigmalnP_sim = np.array(sigmalnP_sim, dtype='float32')[sorting_indices]
 rho_sim = np.array(rho_sim, dtype='float32')[sorting_indices]
-sigmalnrho_sim = np.array(sigmalnrho_sim, dtype='float32')[sorting_indices]
+# sigmalnrho_sim = np.array(sigmalnrho_sim, dtype='float32')[sorting_indices]
 Mvir_sim = Mvir_sim[sorting_indices]
 
 
-Pe_rescale = np.vstack(Pe_rescale)
-median_prof = np.median(Pe_rescale, axis=0)
-sigma_intr_Pe_init = np.mean((np.log(Pe_rescale)-np.log(median_prof))**2, axis=0)**0.5
-rho_rescale = np.vstack(rho_rescale)
-median_prof = np.median(rho_rescale, axis=0)
-sigma_intr_rho_init = np.mean((np.log(rho_rescale)-np.log(median_prof))**2, axis=0)**0.5
+# Now compute intrinsic scatter
+# Since low mass halos have a large scatter we compute it separately for them
+mask_low_mass = Mvir_sim>=10**(13.5)
+Pe_rescale = np.vstack(Pe_rescale)[sorting_indices]
 
+# High mass
+median_prof = np.median(Pe_rescale[mask_low_mass], axis=0)
+sigma_intr_Pe_init_high_mass = get_scatter(np.log(Pe_rescale[mask_low_mass]), np.log(median_prof))
+
+# Low mass
+median_prof = np.median(Pe_rescale[~mask_low_mass], axis=0)
+sigma_intr_Pe_init_low_mass = get_scatter(np.log(Pe_rescale[~mask_low_mass]), np.log(median_prof))
+
+# High mass
+rho_rescale = np.vstack(rho_rescale)[sorting_indices]
+median_prof = np.median(rho_rescale[mask_low_mass], axis=0)
+sigma_intr_rho_init_high_mass = get_scatter(np.log(rho_rescale[mask_low_mass]), np.log(median_prof))
+
+# Low mass
+median_prof = np.median(rho_rescale[~mask_low_mass], axis=0)
+sigma_intr_rho_init_low_mass = get_scatter(np.log(rho_rescale[~mask_low_mass]), np.log(median_prof))
 #update_sigma_intr(sigma_intr_Pe_init, sigma_intr_rho_init)
 
+sigma_intr_Pe_init_high_mass[-1] = 0.1
+sigma_intr_Pe_init_low_mass[-1] = 0.1
+
+sigma_intr_rho_init_high_mass[-1] = 0.1
+sigma_intr_rho_init_low_mass[-1] = 0.1
+
 #####-------------- Prepare for MCMC --------------#####
-fitter = Profile(use_interp=True)
-fit_par = ['gamma', 'alpha', 'log10_M0', 'beta', 'eps1_0', 'eps2_0']
-par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\\beta', '\epsilon_1', '\epsilon_2']
+fitter = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=Mvir_sim.max()+1e10)
+fit_par = ['gamma', 'alpha', 'log10_M0', 'beta', 'eps1_0', 'eps2_0', 'gamma_T']
+par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\\beta', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}']
 
 starting_point = [fid_val[k] for k in fit_par]
 std = [std_dev[k] for k in fit_par]
