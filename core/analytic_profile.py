@@ -143,7 +143,7 @@ class Profile():
         self._update_derived_param()
 
 
-    def get_Pe_profile(self, M, z=0, r_bins=None, return_rho=False):
+    def get_Pe_profile(self, M, z=0, r_bins=None, return_rho=False, return_Temp=False):
         """Computes pressure profile for a given mass from 0.1-1Rvir
 
         Parameters
@@ -163,12 +163,12 @@ class Profile():
 
         rvir = self.get_rvirial(M, z)
 
-        this_profile = self.get_Pe(M, r_bins*rvir, z=z, return_rho=return_rho)
+        this_profile = self.get_Pe(M, r_bins*rvir, z=z, return_rho=return_rho, return_Temp=return_Temp)
         
         return this_profile, r_bins
 
 
-    def get_Pe_profile_interpolated(self, M, z=0, r_bins=None, return_rho=False):
+    def get_Pe_profile_interpolated(self, M, z=0, r_bins=None, return_rho=False, return_Temp=False):
         """_summary_
 
         Parameters
@@ -220,15 +220,21 @@ class Profile():
         this_Pe_profile = this_z_Pe_interp(M, r_bins)
         this_Pe_profile *= self._Pe_prof_interpolator_units
 
+        return_profiles = (this_Pe_profile,)
+
         if return_rho is True:
             this_rho_profile = self._rho_prof_interpolator[z](M, r_bins)
             this_rho_profile *= self._rho_prof_interpolator_units
 
-            return this_Pe_profile, this_rho_profile, r_bins
+            return_profiles += (this_rho_profile,)
             
+        if return_Temp is True:
+            this_Temp_profile = self._Temp_prof_interpolator[z](M, r_bins)
+            this_Temp_profile *= self._Temp_prof_interpolator_units
 
-        else:
-            return this_Pe_profile, r_bins
+            return_profiles += (this_Temp_profile,)
+
+        return return_profiles, r_bins
 
 
     def get_Pe_profile_interpolated2(self, M, z=0, r_bins=None):
@@ -263,7 +269,7 @@ class Profile():
 
         return this_Pe_profile, r_bins
 
-    def get_Pe(self, M, r, z, return_rho=False):
+    def get_Pe(self, M, r, z, return_rho=False, return_Temp=False):
         """Returns the electron pressure based on eq. 40
         in Mead et. al. 2020
 
@@ -291,11 +297,15 @@ class Profile():
 
         P_e = P_e.to(u.keV/u.cm**3, cu.with_H0(self.H0))
 
+        return_profiles = (P_e, )
         if return_rho is True:
-            return P_e, rho_bnd.to(u.g/u.cm**3, cu.with_H0(self.H0)).to(u.GeV/u.cm**3, u.mass_energy())
+            return_profiles += (rho_bnd.to(u.g/u.cm**3, cu.with_H0(self.H0)).to(u.GeV/u.cm**3, u.mass_energy()), )
 
-        else:
-            return P_e
+        if return_Temp is True:
+            return_profiles += (Temp_g, )
+
+        return return_profiles
+
 
     def get_rho_bnd(self, M, r, r_virial, c_M, z):
         rho_bnd = self._get_rho_bnd_wrapper(M, r, r_virial=r_virial, c_M=c_M)
@@ -473,6 +483,7 @@ class Profile():
     def _init_prof_interpolator(self):
         self._Pe_prof_interpolator = {}
         self._rho_prof_interpolator = {}
+        self._Temp_prof_interpolator = {}
 
         r_bins = np.logspace(np.log10(0.009), np.log10(1), 200)
         Mvirs = np.logspace(np.log10(self.mmin), np.log10(self.mmax), 50)*u.Msun/cu.littleh
@@ -480,58 +491,73 @@ class Profile():
         for z in self.zs:
             Pe_profs = []
             rho_profs = []
+            Temp_profs = []
             for j, m in enumerate(Mvirs):
-                temp, _ = self.get_Pe_profile(m, z, r_bins=r_bins, return_rho=True)
-                this_Pe_prof, this_rho_prof = temp[0], temp[1]
+                temp, _ = self.get_Pe_profile(m, z, r_bins=r_bins, return_rho=True, return_Temp=True)
+                this_Pe_prof, this_rho_prof, this_Temp_prof = temp[0], temp[1], temp[2]
                 Pe_profs.append(this_Pe_prof.value)
                 rho_profs.append(this_rho_prof.value)
+                Temp_profs.append(this_Temp_prof)
 
             self._Pe_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, Pe_profs)
             self._rho_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, rho_profs)
+            self._Temp_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, Temp_profs)
         
         self._Pe_prof_interpolator_units = this_Pe_prof.unit
         self._rho_prof_interpolator_units = this_rho_prof.unit
+        self._Temp_prof_interpolator_units = this_Temp_prof.unit
 
 
     def _test_prof_interpolator(self, n=1000):
         if self.use_interp is False:
             print('`use_interp` set to False...Creating interpolator..')
             self._init_prof_interpolator()
-        
+
         # Get r_bins
         r_bins = self.get_Pe_profile(1e12*u.Msun/cu.littleh, 0)[1]
 
         # Now test at each redshift
         for z in self.zs:
             Ms = 10**np.random.uniform(np.log10(self.mmin), np.log10(self.mmax), n)*u.Msun/cu.littleh
-            Pe_difference, rho_difference = 0, 0
+            Pe_difference, rho_difference, Temp_difference = 0., 0., 0.
             for j, m in enumerate(Ms):
-                true_profs,_ = self.get_Pe_profile(m, z, return_rho=True)
-                true_Pe_prof, true_rho_prof = true_profs[0].value, true_profs[1].value
-                
+                true_profs,_ = self.get_Pe_profile(m, z, return_rho=True, return_Temp=True)
+                true_Pe_prof, true_rho_prof, true_Temp_prof = true_profs[0].value, true_profs[1].value, true_profs[2].value
+
                 interp_Pe_prof = np.concatenate(self._Pe_prof_interpolator[z](m, r_bins))
                 interp_rho_prof = np.concatenate(self._rho_prof_interpolator[z](m, r_bins))
+                interp_Temp_prof = np.concatenate(self._Temp_prof_interpolator[z](m, r_bins))
  
                 this_Pe_diff = np.sum(np.abs(interp_Pe_prof/true_Pe_prof - 1))
                 this_rho_diff = np.sum(np.abs(interp_rho_prof/true_rho_prof - 1))
+                this_Temp_diff = np.sum(np.abs(interp_Temp_prof/true_Temp_prof - 1))
 
                 Pe_difference += this_Pe_diff
                 rho_difference += this_rho_diff
+                Temp_difference += this_Temp_diff
 
             mean_Pe_difference = Pe_difference/n*100
             mean_rho_difference = rho_difference/n*100
+            mean_Temp_difference = Temp_difference/n*100
 
             # Raise exception if frac. diff > 0.001 %
-            if mean_rho_difference > self.interp_error_tol:
-                raise Exception(f'Interpolation test failed for rho profile with a mean frac. difference of {mean_rho_difference:.4f}%. :(')
-
             if mean_Pe_difference > self.interp_error_tol:
                 raise Exception(f'Interpolation test failed for Pe profile with a mean frac. difference of {mean_Pe_difference:.4f}%. :(')
 
-            if self.verbose is True:
-                print(f'Mean frac. difference between interpolated and true rho profile...')
-                print(f'At z={z} is {mean_rho_difference:.4f} %')
+            if mean_rho_difference > self.interp_error_tol:
+                raise Exception(f'Interpolation test failed for rho profile with a mean frac. difference of {mean_rho_difference:.4f}%. :(')
 
+            if mean_Temp_difference > self.interp_error_tol:
+                raise Exception(f'Interpolation test failed for Temperature profile with a mean frac. difference of {mean_Temp_difference:.4f}%. :(')
+
+            if self.verbose is True:
                 print(f'Mean frac. difference between interpolated and true Pe profile...')
                 print(f'At z={z} is {mean_Pe_difference:.4f} %')
+                
+                print(f'Mean frac. difference between interpolated and true rho profile...')
+                print(f'At z={z} is {mean_rho_difference:.4f} %')
+                
+                print(f'Mean frac. difference between interpolated and true Temperature profile...')
+                print(f'At z={z} is {mean_Temp_difference:.4f} %')
+
                 print('Success!')
