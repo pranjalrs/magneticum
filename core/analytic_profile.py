@@ -30,6 +30,7 @@ class Profile():
 
         ## For irho = 0
         self.gamma = 1.177  # Polytropic index for bound gas profile
+        self.gamma_T = 2  # Slope for KS temperature profile
 
         ## For irho = 1
         self.a = 0  # gamma= gamma*(M/M0)^a
@@ -165,7 +166,7 @@ class Profile():
 
         this_profile = self.get_Pe(M, r_bins*rvir, z=z, return_rho=return_rho, return_Temp=return_Temp)
         
-        return this_profile, r_bins
+        return this_profile + (r_bins,)
 
 
     def get_Pe_profile_interpolated(self, M, z=0, r_bins=None, return_rho=False, return_Temp=False):
@@ -234,7 +235,7 @@ class Profile():
 
             return_profiles += (this_Temp_profile,)
 
-        return return_profiles, r_bins
+        return return_profiles + (r_bins,)
 
 
     def get_Pe_profile_interpolated2(self, M, z=0, r_bins=None):
@@ -297,12 +298,12 @@ class Profile():
 
         P_e = P_e.to(u.keV/u.cm**3, cu.with_H0(self.H0))
 
-        return_profiles = (P_e, )
+        return_profiles = (P_e,)
         if return_rho is True:
-            return_profiles += (rho_bnd.to(u.g/u.cm**3, cu.with_H0(self.H0)).to(u.GeV/u.cm**3, u.mass_energy()), )
+            return_profiles += (rho_bnd.to(u.g/u.cm**3, cu.with_H0(self.H0)).to(u.GeV/u.cm**3, u.mass_energy()),)
 
         if return_Temp is True:
-            return_profiles += (Temp_g, )
+            return_profiles += (Temp_g,)
 
         return return_profiles
 
