@@ -62,33 +62,17 @@ def update_sigma_intr(val1, val2):
     sigma_intr_rho = val2
 
 
-def likelihood(x, mass_list, z=0):
-    for i in range(len(fit_par)):
-        lb, ub = bounds[fit_par[i]]
-        if x[i]<lb or x[i]>ub:
-            return -np.inf
+def likelihood(theory_prof, field):
+    sim_prof = globals()[field+'_sim']
+    num = np.log(sim_prof[mask_low_mass] / Pe_theory.value[mask_low_mass])**2
+    denom = globals()[f'sigma_intr_{field}_init_high_mass']**2 #+ sigmalnP_sim**2
+    chi2 = 0.5*np.sum(num/denom)  #Sum over radial bins
 
-    fitter.update_param(fit_par, x)
-
-    mvir = mass_list*u.Msun/cu.littleh
-    ## Get profile for each halo
-    Pe_theory, r = fitter.get_Pe_profile_interpolated(mvir, r_bins=r_bins, z=z)
-
-    chi2 = 0 
-
-    ## Get chi2 for Pe
-    num = np.log(Pe_sim[mask_low_mass] / Pe_theory.value[mask_low_mass])**2
-    denom = sigma_intr_Pe_init_high_mass**2 #+ sigmalnP_sim**2
+    idx = sim_prof[~mask_low_mass] ==0
+    num = np.log(sim_prof[~mask_low_mass] / theory_prof.value[~mask_low_mass])**2
+    denom = globals()[f'sigma_intr_{field}_init_low_mass']**2 #+ sigmalnP_sim**2
+    num = ma.array(num, mask=idx, fill_value=0)
     chi2 = 0.5*np.sum(num/denom)  # Sum over radial bins
-    
-    num = np.log(Pe_sim[~mask_low_mass] / Pe_theory.value[~mask_low_mass])**2
-    denom = sigma_intr_Pe_init_low_mass**2 #+ sigmalnP_sim**2
-    chi2 = 0.5*np.sum(num/denom)  # Sum over radial bins
-    
-    # Compute new sigma_intr about the best fit mean
-    median_prof = np.median(Pe_theory.value, axis=0)
-    update = np.mean((np.log(Pe_sim)-np.log(median_prof))**2, axis=0)**0.5
-    update_sigma_intr(update, 0)
 
     return -chi2
 
@@ -105,51 +89,18 @@ def joint_likelihood(x, mass_list, z=0):
     ## Get profile for each halo
     (Pe_theory, rho_theory, Temp_theory), r = fitter.get_Pe_profile_interpolated(mvir, r_bins=r_bins, z=z, return_rho=True, return_Temp=True)
 
-    chi2 = 0 
+    loglike = 0
 
-    ## Get chi2 for Pe
-    num = np.log(Pe_sim[mask_low_mass] / Pe_theory.value[mask_low_mass])**2
-    denom = sigma_intr_Pe_init_high_mass**2 #+ sigmalnP_sim**2
-    chi2 = 0.5*np.sum(num/denom)  # Sum over radial bins
-    
-    idx = Pe_sim[~mask_low_mass] ==0
-    num = np.log(Pe_sim[~mask_low_mass] / Pe_theory.value[~mask_low_mass])**2
-    denom = sigma_intr_Pe_init_low_mass**2 #+ sigmalnP_sim**2
-    num = ma.array(num, mask=idx, fill_value=0)
-    chi2 = 0.5*np.sum(num/denom)  # Sum over radial bins
+    if field == 'Pe' or field=='all':
+        loglike += likelihood(Pe_theory, 'Pe')
 
+    if field == 'rho' or field=='all':
+        loglike += likelihood(rho_theory, 'rho')
 
-    # Compute new sigma_intr about the best fit mean
-#     median_prof = np.median(Pe_theory.value, axis=0)
-#     update_sigma_Pe = np.mean((np.log(Pe_sim)-np.log(median_prof))**2, axis=0)**0.5
+    if field == 'Temp' or field=='all':
+        loglike += likelihood(Temp_theory, 'Temp')
 
-    ## Get chi2 for rho
-    num = np.log(rho_sim[mask_low_mass] / rho_theory.value[mask_low_mass])**2
-    denom = sigma_intr_rho_init_high_mass**2 #+ sigmalnrho_sim**2
-    chi2 += 0.5*np.sum(num/denom)  # Sum over radial bins
-    
-    idx = rho_sim[~mask_low_mass] ==0
-    num = np.log(rho_sim[~mask_low_mass] / rho_theory.value[~mask_low_mass])**2
-    num = ma.array(num, mask=idx, fill_value=0)
-    denom = sigma_intr_rho_init_low_mass**2 #+ sigmalnrho_sim**2
-    chi2 += 0.5*np.sum(num/denom)  # Sum over radial bins
-
-    ## Get chi2 for Temp.
-    num = np.log(Temp_sim[mask_low_mass] / Temp_theory.value[mask_low_mass])**2
-    denom = sigma_intr_Temp_init_high_mass**2 #+ sigmalnP_sim**2
-    chi2 += 0.5*np.sum(num/denom)  # Sum over radial bins
-
-    idx = Temp_sim[~mask_low_mass] ==0
-    num = np.log(Temp_sim[~mask_low_mass] / Temp_theory.value[~mask_low_mass])**2
-    denom = sigma_intr_Temp_init_low_mass**2 #+ sigmalnP_sim**2
-    num = ma.array(num, mask=idx, fill_value=0)
-    chi2 += 0.5*np.sum(num/denom)  # Sum over radial bins
-
-    # Compute new sigma_intr about the best fit mean
-#    median_prof = np.median(Pe_theory.value, axis=0)
- #   update_sigma_rho = np.mean((np.log(Pe_sim)-np.log(median_prof))**2, axis=0)**0.5
-  #  update_sigma_intr(update_sigma_Pe, update_sigma_rho)
-    return -chi2
+    return loglike
 
 
 bounds = {'f_H': [0.65, 0.85],
@@ -363,9 +314,8 @@ for i, key in enumerate(fit_par):
 
 print(f'Finished initializing {nwalkers} walkers...')
 
-if args.field == 'both': use_likelihood = joint_likelihood
-else: use_likelihood = likelihood
-print(f'Using Likelihood: {use_likelihood}')
+field = args.field
+print(f'Using Likelihood for {field} field(s)')
 
 #####-------------- RUN MCMC --------------#####
 print('Running MCMC..')
