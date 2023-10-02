@@ -103,7 +103,7 @@ def joint_likelihood(x, mass_list, z=0):
 
     mvir = mass_list*u.Msun/cu.littleh
     ## Get profile for each halo
-    (Pe_theory, rho_theory), r = fitter.get_Pe_profile_interpolated(mvir, r_bins=r_bins, z=z, return_rho=True)
+    (Pe_theory, rho_theory, Temp_theory), r = fitter.get_Pe_profile_interpolated(mvir, r_bins=r_bins, z=z, return_rho=True, return_Temp=True)
 
     chi2 = 0 
 
@@ -134,6 +134,16 @@ def joint_likelihood(x, mass_list, z=0):
     denom = sigma_intr_rho_init_low_mass**2 #+ sigmalnrho_sim**2
     chi2 += 0.5*np.sum(num/denom)  # Sum over radial bins
 
+    ## Get chi2 for Temp.
+    num = np.log(Temp_sim[mask_low_mass] / Temp_theory.value[mask_low_mass])**2
+    denom = sigma_intr_Temp_init_high_mass**2 #+ sigmalnP_sim**2
+    chi2 += 0.5*np.sum(num/denom)  # Sum over radial bins
+
+    idx = Temp_sim[~mask_low_mass] ==0
+    num = np.log(Temp_sim[~mask_low_mass] / Temp_theory.value[~mask_low_mass])**2
+    denom = sigma_intr_Temp_init_low_mass**2 #+ sigmalnP_sim**2
+    num = ma.array(num, mask=idx, fill_value=0)
+    chi2 += 0.5*np.sum(num/denom)  # Sum over radial bins
 
     # Compute new sigma_intr about the best fit mean
 #    median_prof = np.median(Pe_theory.value, axis=0)
@@ -144,17 +154,17 @@ def joint_likelihood(x, mass_list, z=0):
 
 bounds = {'f_H': [0.65, 0.85],
         'gamma': [1.1, 5],
-        'alpha': [0.1, 1.5],
+        'alpha': [0.1, 2],
         'log10_M0': [10, 17],
         'M0': [1e10, 1e17],
         'beta': [0.4, 0.8],
         'eps1_0': [-0.95, 3],
         'eps2_0': [-0.95, 3],
-	'gamma_T': [1.1, 5]}
+        'gamma_T': [1.1, 3]}
 
 fid_val = {'f_H': 0.75,
         'gamma': 1.2,
-        'alpha': 0.5,
+        'alpha': 1,
         'log10_M0': 14,
         'M0': 1e14,
         'beta': 0.6,
@@ -164,13 +174,13 @@ fid_val = {'f_H': 0.75,
 
 std_dev = {'f_H': 0.2,
         'gamma': 0.2,
-        'alpha': 0.2,
+        'alpha': 0.5,
         'log10_M0': 2,
         'M0': 1e12,
         'beta': 0.2,
         'eps1_0': 0.2,
         'eps2_0': 0.2,
-	'gamma_T':0.2}
+	'gamma_T':0.3}
 
 
 #####-------------- Load Data --------------#####
@@ -182,19 +192,23 @@ files += glob.glob(f'{data_path}/Box2/Pe_Pe_Mead_Temp_matter_cdm_gas_z=0.00_mvir
 ## the analytical profile for computational efficiency
 Pe_sim= []
 rho_sim= []
+Temp_sim= []
 
 # r_sim = []
 sigmaP_sim = []
 sigmarho_sim = []
+sigmaTemp_sim = []
 
 sigmalnP_sim = []
 sigmalnrho_sim = []
+sigmalnTemp_sim = []
 
 Mvir_sim = []
 
 ## Also need to rescale profile to guess intrinsic scatter 
 Pe_rescale = []
 rho_rescale = []
+Temp_rescale = []
 
 r_bins = np.logspace(np.log10(0.15), np.log10(1), 20)
 
@@ -238,7 +252,31 @@ for f in files:
         
         rho_sim.append(rho_prof_interp)
         rho_rescale.append(rho_rescale_interp)
-    
+
+        #### Now do same things for Temp
+        this_prof_r = halo['fields']['Temp'][1]/halo['rvir']
+        this_prof_r = this_prof_r
+        this_prof_field = halo['fields']['Temp'][0]
+        this_sigma_lnrho = halo['fields']['Temp'][3]
+                          
+
+        #Rescale prof to get intr. scatter
+        rescale_value = nan_interp(halo['fields']['Temp'][1], halo['fields']['Temp'][0])(halo['rvir'])
+        prof_rescale = (halo['fields']['Temp'][0] / rescale_value)
+        Temp_prof_interp = nan_interp(this_prof_r, this_prof_field)(r_bins)
+        Temp_rescale_interp = nan_interp(this_prof_r, prof_rescale)(r_bins)
+        
+        if np.any(prof_rescale<0) or np.any(Temp_prof_interp<0) or np.all(np.log(prof_rescale)<0):
+            continue
+
+        Pe_sim.append(Pe_prof_interp)
+        Pe_rescale.append(Pe_rescale_interp)
+        
+        rho_sim.append(rho_prof_interp)
+        rho_rescale.append(rho_rescale_interp)
+        
+        Temp_sim.append(Temp_prof_interp)
+        Temp_rescale.append(Temp_rescale_interp)    
     
         Mvir_sim.append(halo['mvir'])
 
@@ -251,31 +289,44 @@ Pe_sim = np.array(Pe_sim, dtype='float32')[sorting_indices]
 # sigmalnP_sim = np.array(sigmalnP_sim, dtype='float32')[sorting_indices]
 rho_sim = np.array(rho_sim, dtype='float32')[sorting_indices]
 # sigmalnrho_sim = np.array(sigmalnrho_sim, dtype='float32')[sorting_indices]
+Temp_sim = np.array(Temp_sim, dtype='float32')[sorting_indices]
 Mvir_sim = Mvir_sim[sorting_indices]
 
 
 # Now compute intrinsic scatter
 # Since low mass halos have a large scatter we compute it separately for them
 mask_low_mass = Mvir_sim>=10**(13.5)
-Pe_rescale = np.vstack(Pe_rescale)[sorting_indices]
 
+####################### Pressure ###############################
+Pe_rescale = np.vstack(Pe_rescale)[sorting_indices]
 # High mass
 median_prof = np.median(Pe_rescale[mask_low_mass], axis=0)
 sigma_intr_Pe_init_high_mass = get_scatter(np.log(Pe_rescale[mask_low_mass]), np.log(median_prof))
-
 # Low mass
 median_prof = np.median(Pe_rescale[~mask_low_mass], axis=0)
 sigma_intr_Pe_init_low_mass = get_scatter(np.log(Pe_rescale[~mask_low_mass]), np.log(median_prof))
 
-# High mass
+
+####################### rho ###############################
 rho_rescale = np.vstack(rho_rescale)[sorting_indices]
+# High mass
 median_prof = np.median(rho_rescale[mask_low_mass], axis=0)
 sigma_intr_rho_init_high_mass = get_scatter(np.log(rho_rescale[mask_low_mass]), np.log(median_prof))
-
 # Low mass
 median_prof = np.median(rho_rescale[~mask_low_mass], axis=0)
 sigma_intr_rho_init_low_mass = get_scatter(np.log(rho_rescale[~mask_low_mass]), np.log(median_prof))
 #update_sigma_intr(sigma_intr_Pe_init, sigma_intr_rho_init)
+
+
+####################### Temp ###############################
+Temp_rescale = np.vstack(Temp_rescale)[sorting_indices]
+# High mass
+median_prof = np.median(Temp_rescale[mask_low_mass], axis=0)
+sigma_intr_Temp_init_high_mass = get_scatter(np.log(Temp_rescale[mask_low_mass]), np.log(median_prof))
+# Low mass
+median_prof = np.median(Temp_rescale[~mask_low_mass], axis=0)
+sigma_intr_Temp_init_low_mass = get_scatter(np.log(Temp_rescale[~mask_low_mass]), np.log(median_prof))
+
 
 sigma_intr_Pe_init_high_mass[-1] = 0.1
 sigma_intr_Pe_init_low_mass[-1] = 0.1
@@ -283,8 +334,14 @@ sigma_intr_Pe_init_low_mass[-1] = 0.1
 sigma_intr_rho_init_high_mass[-1] = 0.1
 sigma_intr_rho_init_low_mass[-1] = 0.1
 
+sigma_intr_Temp_init_high_mass[-1] = 0.1
+sigma_intr_Temp_init_low_mass[-1] = 0.1
+
+
+print('Finished processing simulation data...')
 #####-------------- Prepare for MCMC --------------#####
 fitter = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=Mvir_sim.max()+1e10)
+print('Initialized profile fitter ...')
 fit_par = ['gamma', 'alpha', 'log10_M0', 'beta', 'eps1_0', 'eps2_0', 'gamma_T']
 par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\\beta', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}']
 
@@ -292,7 +349,7 @@ starting_point = [fid_val[k] for k in fit_par]
 std = [std_dev[k] for k in fit_par]
 
 ndim = len(fit_par)
-nwalkers= 2 * ndim
+nwalkers= 40
 nsteps = args.nsteps
 
 p0_walkers = emcee.utils.sample_ball(starting_point, std, size=nwalkers)
@@ -303,6 +360,8 @@ for i, key in enumerate(fit_par):
     for walker in range(nwalkers):
         while p0_walkers[walker, i] < low_lim or p0_walkers[walker, i] > up_lim:
             p0_walkers[walker, i] = np.random.rand()*std[i] + starting_point[i]
+
+print(f'Finished initializing {nwalkers} walkers...')
 
 if args.field == 'both': use_likelihood = joint_likelihood
 else: use_likelihood = likelihood
