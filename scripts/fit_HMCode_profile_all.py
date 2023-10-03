@@ -64,7 +64,7 @@ def update_sigma_intr(val1, val2):
 
 def likelihood(theory_prof, field):
     sim_prof = globals()[field+'_sim']
-    num = np.log(sim_prof[mask_low_mass] / Pe_theory.value[mask_low_mass])**2
+    num = np.log(sim_prof[mask_low_mass] / theory_prof.value[mask_low_mass])**2
     denom = globals()[f'sigma_intr_{field}_init_high_mass']**2 #+ sigmalnP_sim**2
     chi2 = 0.5*np.sum(num/denom)  #Sum over radial bins
 
@@ -111,7 +111,8 @@ bounds = {'f_H': [0.65, 0.85],
         'beta': [0.4, 0.8],
         'eps1_0': [-0.95, 3],
         'eps2_0': [-0.95, 3],
-        'gamma_T': [1.1, 3]}
+        'gamma_T': [1.1, 5],
+         'b': [-3, 3]}
 
 fid_val = {'f_H': 0.75,
         'gamma': 1.2,
@@ -121,7 +122,8 @@ fid_val = {'f_H': 0.75,
         'beta': 0.6,
         'eps1_0': 0.2,
         'eps2_0': -0.1,
-	'gamma_T': 2}
+	'gamma_T': 2,
+          'b': 1}
 
 std_dev = {'f_H': 0.2,
         'gamma': 0.2,
@@ -131,7 +133,8 @@ std_dev = {'f_H': 0.2,
         'beta': 0.2,
         'eps1_0': 0.2,
         'eps2_0': 0.2,
-	'gamma_T':0.3}
+	'gamma_T':0.3,
+          'b': 0.5}
 
 
 #####-------------- Load Data --------------#####
@@ -293,8 +296,8 @@ print('Finished processing simulation data...')
 #####-------------- Prepare for MCMC --------------#####
 fitter = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=Mvir_sim.max()+1e10)
 print('Initialized profile fitter ...')
-fit_par = ['gamma', 'alpha', 'log10_M0', 'beta', 'eps1_0', 'eps2_0', 'gamma_T']
-par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\\beta', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}']
+fit_par = ['gamma', 'alpha', 'log10_M0', 'beta', 'eps1_0', 'eps2_0', 'gamma_T', 'b']
+par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\\beta', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}', 'b']
 
 starting_point = [fid_val[k] for k in fit_par]
 std = [std_dev[k] for k in fit_par]
@@ -327,12 +330,12 @@ if test is False:
             sys.exit(0)
         
         print('Running MCMC with MPI...')
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, use_likelihood, pool=pool, args=[Mvir_sim])
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, pool=pool, args=[Mvir_sim])
         sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
 
 else:
     print('Running MCMC...')
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, use_likelihood, args=[Mvir_sim])
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, args=[Mvir_sim])
     sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
 
 #####-------------- Plot and Save --------------#####
