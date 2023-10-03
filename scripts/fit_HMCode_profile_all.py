@@ -28,7 +28,7 @@ import post_processing
 #####-------------- Parse Args --------------#####
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--field', default='Pe', type=str)
+parser.add_argument('--field')
 parser.add_argument('--test', type=bool, default=False)
 parser.add_argument('--run', type=int)
 parser.add_argument('--nsteps', type=int)
@@ -91,13 +91,13 @@ def joint_likelihood(x, mass_list, z=0):
 
     loglike = 0
 
-    if field == 'Pe' or field=='all':
+    if 'Pe' in field  or 'all' in field:
         loglike += likelihood(Pe_theory, 'Pe')
 
-    if field == 'rho' or field=='all':
+    if 'rho' in field or 'all' in field:
         loglike += likelihood(rho_theory, 'rho')
 
-    if field == 'Temp' or field=='all':
+    if 'Temp' in field  or 'all' in field:
         loglike += likelihood(Temp_theory, 'Temp')
 
     return loglike
@@ -317,7 +317,7 @@ for i, key in enumerate(fit_par):
 
 print(f'Finished initializing {nwalkers} walkers...')
 
-field = args.field
+field = args.field.strip('"').split(',')
 print(f'Using Likelihood for {field} field(s)')
 
 #####-------------- RUN MCMC --------------#####
