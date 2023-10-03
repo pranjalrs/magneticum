@@ -31,7 +31,9 @@ class Profile():
 		## For irho = 0
 		self.gamma = 1.177  # Polytropic index for bound gas profile
 		self.gamma_T = 2  # Slope for KS temperature profile
-
+		self.b = 0.0  # Slope for alpha = alpha * (M/M0)^b
+		self.c = 0.0  # Slope for gamma_T = gamma_T * (M/M0)^c
+		self.d = 0.0  # Slope for gamma = gamma * (M/M0)^d
 		## For irho = 1
 		self.a = 0  # gamma= gamma*(M/M0)^a
 
@@ -323,7 +325,7 @@ class Profile():
 		r_s = r_virial/c_M
 
 		params = Dict.empty(key_type=types.unicode_type, value_type=types.float64)
-		M0 = 5e14*u.Msun/cu.littleh
+		M0 = 1e14*u.Msun/cu.littleh
 
 		if self.irho == 0:
 			params['gamma'] = self.gamma
@@ -379,7 +381,8 @@ class Profile():
 		'''
 		T_v = self._get_Temp_virial(M, r_virial, z=z)
 		r_s = r_virial/c_M
-		x = (r/r_s).decompose()
+		#x = (r/r_s).decompose()
+		x = (r/r_virial).decompose()
 
 		if self.irho == 0 or self.irho == 1:
 			f_r = np.log(1 + x)/x
@@ -387,15 +390,17 @@ class Profile():
 		elif self.irho == 2:
 			f_r = 1
 
-		return T_v * (f_r)**(1/(self.gamma_T-1))
-
+		M0 = 1e14*u.Msun/cu.littleh
+		gamma_T = self.gamma_T*(M/M0)**self.c
+		return T_v * (f_r)**(1/(gamma_T-1))
 
 	def _get_Temp_virial(self, M, r_virial, z):
 		'''Eq. 39
 		Tv = G * m_p * mu_p /(a * rvirial) /(3/2 * kB) * M
 		'''
-		return self.alpha*(const.G*const.m_p*self.mu_p*(1+z)/r_virial/(3/2*const.k_B)*M).to(u.K)
-
+		M0 = 1e14*u.Msun/cu.littleh
+		alpha = self.alpha*((M/M0).decompose())**self.b
+		return alpha*(const.G*const.m_p*self.mu_p*(1+z)/r_virial/(3/2*const.k_B)*M).to(u.K)
 
 	def get_delta_v(self, z):
 		'''Eq. 22
