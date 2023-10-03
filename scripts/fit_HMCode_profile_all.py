@@ -39,102 +39,130 @@ run = args.run
 #####-------------- Likelihood --------------#####
 
 def nan_interp(x, y):
-    idx = ((np.isnan(y)) | (y==0))
-    return interp1d(x[~idx], y[~idx], kind='cubic', bounds_error=False, fill_value=0)
+	idx = ((np.isnan(y)) | (y==0))
+	return interp1d(x[~idx], y[~idx], kind='cubic', bounds_error=False, fill_value=0)
 
 def get_scatter(x, xbar):
-    # Calculate for radial bin at a time
-    std  = []
-    for i in range(x.shape[1]):
-        this_column = x[:, i]
-        idx = (this_column>0) & (np.isfinite(this_column))
-        this_column = this_column[idx]
+	# Calculate for radial bin at a time
+	std  = []
+	for i in range(x.shape[1]):
+		this_column = x[:, i]
+		idx = (this_column>0) & (np.isfinite(this_column))
+		this_column = this_column[idx]
 #         std.append(np.mean((this_column-xbar[i])**2)**0.5)
-        std.append((np.percentile(this_column-xbar[i], 84, axis=0) - np.percentile(this_column-xbar[i], 16, axis=0))/2)
+		std.append((np.percentile(this_column-xbar[i], 84, axis=0) - np.percentile(this_column-xbar[i], 16, axis=0))/2)
 
-    return np.array(std)
+	return np.array(std)
 
 def update_sigma_intr(val1, val2):
-    global sigma_intr_Pe
-    global sigma_intr_rho
-    
-    sigma_intr_Pe = val1
-    sigma_intr_rho = val2
+	global sigma_intr_Pe
+	global sigma_intr_rho
+	
+	sigma_intr_Pe = val1
+	sigma_intr_rho = val2
+
+def get_halo_data(halo, field):
+	if field=='Pe':
+		r = halo['fields']['Pe_Mead'][1]/halo['rvir']
+		profile = halo['fields']['Pe_Mead'][0]
+		this_sigma_lnP = halo['fields']['Pe'][3]
+
+	if field=='rho':
+		r = halo['fields']['gas'][1]/halo['rvir']
+		profile = halo['fields']['gas'][0]
+		sigma_lnrho = halo['fields']['gas'][3]
+
+	if field=='Temp':
+		r = halo['fields']['Temp'][1]/halo['rvir']
+		profile = halo['fields']['Temp'][0]
+		sigma_lnrho = halo['fields']['Temp'][3]
+
+	#Rescale prof to get intr. scatter
+	rescale_value = nan_interp(r, profile)(1)
+	profile_rescale = (profile/ rescale_value)
+	profile_interp = nan_interp(r, profile)(r_bins)
+	profile_rescale_interp = nan_interp(r, profile)(r_bins)
+
+	if np.any(profile_rescale<0) or np.any(profile_interp<0) or np.all(np.log(profile_rescale)<0):
+		return None, None
+	
+	else:
+		return profile_interp, profile_rescale_interp
 
 
 def likelihood(theory_prof, field):
-    sim_prof = globals()[field+'_sim']
-    num = np.log(sim_prof[mask_low_mass] / theory_prof.value[mask_low_mass])**2
-    denom = globals()[f'sigma_intr_{field}_init_high_mass']**2 #+ sigmalnP_sim**2
-    chi2 = 0.5*np.sum(num/denom)  #Sum over radial bins
+	sim_prof = globals()[field+'_sim']
+	num = np.log(sim_prof[mask_low_mass] / theory_prof.value[mask_low_mass])**2
+	denom = globals()[f'sigma_intr_{field}_init_high_mass']**2 #+ sigmalnP_sim**2
+	chi2 = 0.5*np.sum(num/denom)  #Sum over radial bins
 
-    idx = sim_prof[~mask_low_mass] ==0
-    num = np.log(sim_prof[~mask_low_mass] / theory_prof.value[~mask_low_mass])**2
-    denom = globals()[f'sigma_intr_{field}_init_low_mass']**2 #+ sigmalnP_sim**2
-    num = ma.array(num, mask=idx, fill_value=0)
-    chi2 = 0.5*np.sum(num/denom)  # Sum over radial bins
+	idx = sim_prof[~mask_low_mass] ==0
+	num = np.log(sim_prof[~mask_low_mass] / theory_prof.value[~mask_low_mass])**2
+	denom = globals()[f'sigma_intr_{field}_init_low_mass']**2 #+ sigmalnP_sim**2
+	num = ma.array(num, mask=idx, fill_value=0)
+	chi2 = 0.5*np.sum(num/denom)  # Sum over radial bins
 
-    return -chi2
+	return -chi2
 
 
 def joint_likelihood(x, mass_list, z=0):
-    for i in range(len(fit_par)):
-        lb, ub = bounds[fit_par[i]]
-        if x[i]<lb or x[i]>ub:
-            return -np.inf
+	for i in range(len(fit_par)):
+		lb, ub = bounds[fit_par[i]]
+		if x[i]<lb or x[i]>ub:
+			return -np.inf
 
-    fitter.update_param(fit_par, x)
+	fitter.update_param(fit_par, x)
 
-    mvir = mass_list*u.Msun/cu.littleh
-    ## Get profile for each halo
-    (Pe_theory, rho_theory, Temp_theory), r = fitter.get_Pe_profile_interpolated(mvir, r_bins=r_bins, z=z, return_rho=True, return_Temp=True)
+	mvir = mass_list*u.Msun/cu.littleh
+	## Get profile for each halo
+	(Pe_theory, rho_theory, Temp_theory), r = fitter.get_Pe_profile_interpolated(mvir, r_bins=r_bins, z=z, return_rho=True, return_Temp=True)
 
-    loglike = 0
+	loglike = 0
 
-    if 'Pe' in field  or 'all' in field:
-        loglike += likelihood(Pe_theory, 'Pe')
+	if 'Pe' in field  or 'all' in field:
+		loglike += likelihood(Pe_theory, 'Pe')
 
-    if 'rho' in field or 'all' in field:
-        loglike += likelihood(rho_theory, 'rho')
+	if 'rho' in field or 'all' in field:
+		loglike += likelihood(rho_theory, 'rho')
 
-    if 'Temp' in field  or 'all' in field:
-        loglike += likelihood(Temp_theory, 'Temp')
+	if 'Temp' in field  or 'all' in field:
+		loglike += likelihood(Temp_theory, 'Temp')
 
-    return loglike
+	return loglike
 
 
 bounds = {'f_H': [0.65, 0.85],
-        'gamma': [1.1, 5],
-        'alpha': [0.1, 2],
-        'log10_M0': [10, 17],
-        'M0': [1e10, 1e17],
-        'beta': [0.4, 0.8],
-        'eps1_0': [-0.95, 3],
-        'eps2_0': [-0.95, 3],
-        'gamma_T': [1.1, 5],
-         'b': [-3, 3]}
+		'gamma': [1.1, 5],
+		'alpha': [0.1, 2],
+		'log10_M0': [10, 17],
+		'M0': [1e10, 1e17],
+		'beta': [0.4, 0.8],
+		'eps1_0': [-0.95, 3],
+		'eps2_0': [-0.95, 3],
+		'gamma_T': [1.1, 5],
+		 'b': [-3, 3]}
 
 fid_val = {'f_H': 0.75,
-        'gamma': 1.2,
-        'alpha': 1,
-        'log10_M0': 14,
-        'M0': 1e14,
-        'beta': 0.6,
-        'eps1_0': 0.2,
-        'eps2_0': -0.1,
+		'gamma': 1.2,
+		'alpha': 1,
+		'log10_M0': 14,
+		'M0': 1e14,
+		'beta': 0.6,
+		'eps1_0': 0.2,
+		'eps2_0': -0.1,
 	'gamma_T': 2,
-          'b': 1}
+		  'b': 1}
 
 std_dev = {'f_H': 0.2,
-        'gamma': 0.2,
-        'alpha': 0.5,
-        'log10_M0': 2,
-        'M0': 1e12,
-        'beta': 0.2,
-        'eps1_0': 0.2,
-        'eps2_0': 0.2,
+		'gamma': 0.2,
+		'alpha': 0.5,
+		'log10_M0': 2,
+		'M0': 1e12,
+		'beta': 0.2,
+		'eps1_0': 0.2,
+		'eps2_0': 0.2,
 	'gamma_T':0.3,
-          'b': 0.5}
+		  'b': 0.5}
 
 
 #####-------------- Load Data --------------#####
@@ -168,71 +196,30 @@ r_bins = np.logspace(np.log10(0.15), np.log10(1), 20)
 
 
 for f in files:
-    this_prof_data = joblib.load(f)
-    
-    for halo in this_prof_data:
-        this_prof_r = halo['fields']['Pe_Mead'][1]/halo['rvir']
-        this_prof_field = halo['fields']['Pe_Mead'][0]
-        this_sigma_lnP = halo['fields']['Pe'][3]
+	this_prof_data = joblib.load(f)
 
-        #Rescale prof to get intr. scatter
-        rescale_value = nan_interp(this_prof_r, this_prof_field)(1)
-        prof_rescale = (this_prof_field/ rescale_value)
-        Pe_prof_interp = nan_interp(this_prof_r, this_prof_field)(r_bins)
-        Pe_rescale_interp = nan_interp(this_prof_r, prof_rescale)(r_bins)
+	for halo in this_prof_data:
 
-        if np.any(prof_rescale<0) or np.any(Pe_prof_interp<0) or np.all(np.log(prof_rescale)<0):
-            continue
+		## Pressure	
+		Pe_prof_interp, Pe_rescale_interp = get_halo_data(halo, 'Pe')
+		if Pe_prof_interp is None or Pe_prof_rescale_interp is None: continue
+		Pe_sim.append(Pe_prof_interp)
+		Pe_rescale.append(Pe_rescale_interp)
 
-        #### Now do same things for rho
-        this_prof_r = halo['fields']['gas'][1]/halo['rvir']
-        this_prof_r = this_prof_r
-        this_prof_field = halo['fields']['gas'][0]
-        this_sigma_lnrho = halo['fields']['gas'][3]
-                          
-
-        #Rescale prof to get intr. scatter
-        rescale_value = nan_interp(halo['fields']['gas'][1], halo['fields']['gas'][0])(halo['rvir'])
-        prof_rescale = (halo['fields']['gas'][0] / rescale_value)
-        rho_prof_interp = nan_interp(this_prof_r, this_prof_field)(r_bins)
-        rho_rescale_interp = nan_interp(this_prof_r, prof_rescale)(r_bins)
-        
-        if np.any(prof_rescale<0) or np.any(rho_prof_interp<0) or np.all(np.log(prof_rescale)<0):
-            continue
+		## Gas density
+		rho_prof_interp, rho_rescale_interp = get_halo_data(halo, 'rho')
+		if Pe_prof_interp is None or Pe_prof_rescale_interp is None: continue
+		rho_sim.append(rho_prof_interp)
+		rho_rescale.append(rho_rescale_interp)
 
 
-        Pe_sim.append(Pe_prof_interp)
-        Pe_rescale.append(Pe_rescale_interp)
-        
-        rho_sim.append(rho_prof_interp)
-        rho_rescale.append(rho_rescale_interp)
+		## Temperature
+		Temp_prof_interp, Temp_rescale_interp = get_halo_data(halo, 'Temp')
+		if Temp_prof_interp is None or Temp_prof_rescale_interp is None: continue
+		Temp_sim.append(Temp_prof_interp)
+		Temp_rescale.append(Temp_rescale_interp)    
 
-        #### Now do same things for Temp
-        this_prof_r = halo['fields']['Temp'][1]/halo['rvir']
-        this_prof_r = this_prof_r
-        this_prof_field = halo['fields']['Temp'][0]
-        this_sigma_lnrho = halo['fields']['Temp'][3]
-                          
-
-        #Rescale prof to get intr. scatter
-        rescale_value = nan_interp(halo['fields']['Temp'][1], halo['fields']['Temp'][0])(halo['rvir'])
-        prof_rescale = (halo['fields']['Temp'][0] / rescale_value)
-        Temp_prof_interp = nan_interp(this_prof_r, this_prof_field)(r_bins)
-        Temp_rescale_interp = nan_interp(this_prof_r, prof_rescale)(r_bins)
-        
-        if np.any(prof_rescale<0) or np.any(Temp_prof_interp<0) or np.all(np.log(prof_rescale)<0):
-            continue
-
-        Pe_sim.append(Pe_prof_interp)
-        Pe_rescale.append(Pe_rescale_interp)
-        
-        rho_sim.append(rho_prof_interp)
-        rho_rescale.append(rho_rescale_interp)
-        
-        Temp_sim.append(Temp_prof_interp)
-        Temp_rescale.append(Temp_rescale_interp)    
-    
-        Mvir_sim.append(halo['mvir'])
+		Mvir_sim.append(halo['mvir'])
 
 # Now we need to sort halos in order of increasing mass
 # Since this is what the scipy interpolator expects
@@ -309,11 +296,11 @@ nsteps = args.nsteps
 p0_walkers = emcee.utils.sample_ball(starting_point, std, size=nwalkers)
 
 for i, key in enumerate(fit_par):
-    low_lim, up_lim = bounds[fit_par[i]]
+	low_lim, up_lim = bounds[fit_par[i]]
 
-    for walker in range(nwalkers):
-        while p0_walkers[walker, i] < low_lim or p0_walkers[walker, i] > up_lim:
-            p0_walkers[walker, i] = np.random.rand()*std[i] + starting_point[i]
+	for walker in range(nwalkers):
+		while p0_walkers[walker, i] < low_lim or p0_walkers[walker, i] > up_lim:
+			p0_walkers[walker, i] = np.random.rand()*std[i] + starting_point[i]
 
 print(f'Finished initializing {nwalkers} walkers...')
 
@@ -324,25 +311,25 @@ print(f'Using Likelihood for {field} field(s)')
 print('Running MCMC..')
 
 if test is False:
-    with MPIPool() as pool:
-        if not pool.is_master():
-            pool.wait()
-            sys.exit(0)
-        
-        print('Running MCMC with MPI...')
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, pool=pool, args=[Mvir_sim])
-        sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
+	with MPIPool() as pool:
+		if not pool.is_master():
+			pool.wait()
+			sys.exit(0)
+		
+		print('Running MCMC with MPI...')
+		sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, pool=pool, args=[Mvir_sim])
+		sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
 
 else:
-    print('Running MCMC...')
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, args=[Mvir_sim])
-    sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
+	print('Running MCMC...')
+	sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, args=[Mvir_sim])
+	sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
 
 #####-------------- Plot and Save --------------#####
-save_path = f'../../magneticum-data/data/emcee/fit_{args.field}_all/run{run}'
+save_path = f'../../magneticum-data/data/emcee/fit_{args.field}_all_halos/run{run}'
 if not os.path.exists(save_path):
-    # If the folder does not exist, create it and break the loop
-    os.makedirs(save_path)
+	# If the folder does not exist, create it and break the loop
+	os.makedirs(save_path)
 
 walkers = sampler.get_chain()
 np.save(f'{save_path}/all_walkers.npy', walkers)
@@ -361,9 +348,9 @@ fig, ax = plt.subplots(len(fit_par), 1, figsize=(10, 1.5*len(fit_par)))
 ax = ax.flatten()
 
 for i in range(len(fit_par)):
-    ax[i].plot(walkers[:, :, i])
-    ax[i].set_ylabel(f'${par_latex_names[i]}$')
-    ax[i].set_xlabel('Step #')
+	ax[i].plot(walkers[:, :, i])
+	ax[i].set_ylabel(f'${par_latex_names[i]}$')
+	ax[i].set_xlabel('Step #')
 
 plt.savefig(f'{save_path}/trace_plot.pdf')
 
@@ -381,7 +368,7 @@ c = ['r', 'b', 'g', 'k']
 bins = [13.5, 14, 14.5, 15]
 # Fiducial HMCode profiles
 fitter.update_param(fit_par, gd_samples.getMeans())
-Pe_bestfit, rho_bestfit, r_bestfit = fitter.get_Pe_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0, return_rho=True)
+(Pe_bestfit, rho_bestfit, Temp_bestfit), r_bestfit = fitter.get_Pe_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0, return_rho=True, return_Temp=True)
 
 
 ## Plot median Pe profiles
@@ -406,3 +393,14 @@ plt.ylabel('$\\rho_{gas}$')
 plt.xlabel('$r/Rvir$')
 plt.legend()
 plt.savefig(f'{save_path}/best_fit_rho.pdf')
+
+## Plot median Temp. profiles
+plt.figure(figsize=(10, 6))
+plt.loglog(r_bins, np.median(Temp_sim, axis=0), label='Median sim prof')
+plt.loglog(r_bestfit, np.median(Temp_bestfit, axis=0), label='Median theory prof')
+
+
+plt.ylabel('Temperature')
+plt.xlabel('$r/Rvir$')
+plt.legend()
+plt.savefig(f'{save_path}/best_fit_temp.pdf')
