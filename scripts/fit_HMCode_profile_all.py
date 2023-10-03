@@ -25,6 +25,8 @@ sys.path.append('../core/')
 from analytic_profile import Profile
 import post_processing
 
+import ipdb
+
 #####-------------- Parse Args --------------#####
 
 parser = argparse.ArgumentParser()
@@ -46,6 +48,7 @@ def get_scatter(x, xbar):
 	# Calculate for radial bin at a time
 	std  = []
 	for i in range(x.shape[1]):
+#		ipdb.set_trace()
 		this_column = x[:, i]
 		idx = (this_column>0) & (np.isfinite(this_column))
 		this_column = this_column[idx]
@@ -80,12 +83,12 @@ def get_halo_data(halo, field):
 	#Rescale prof to get intr. scatter
 	rescale_value = nan_interp(r, profile)(1)
 	profile_rescale = (profile/ rescale_value)
+	profile_rescale_interp = nan_interp(r, profile_rescale)(r_bins)
 	profile_interp = nan_interp(r, profile)(r_bins)
-	profile_rescale_interp = nan_interp(r, profile)(r_bins)
 
 	if np.any(profile_rescale<0) or np.any(profile_interp<0) or np.all(np.log(profile_rescale)<0):
 		return None, None
-	
+
 	else:
 		return profile_interp, profile_rescale_interp
 
@@ -202,20 +205,24 @@ for f in files:
 
 		## Pressure	
 		Pe_prof_interp, Pe_rescale_interp = get_halo_data(halo, 'Pe')
-		if Pe_prof_interp is None or Pe_prof_rescale_interp is None: continue
-		Pe_sim.append(Pe_prof_interp)
-		Pe_rescale.append(Pe_rescale_interp)
+		if Pe_prof_interp is None or Pe_rescale_interp is None: continue
 
 		## Gas density
 		rho_prof_interp, rho_rescale_interp = get_halo_data(halo, 'rho')
-		if Pe_prof_interp is None or Pe_prof_rescale_interp is None: continue
-		rho_sim.append(rho_prof_interp)
-		rho_rescale.append(rho_rescale_interp)
+		if rho_prof_interp is None or rho_rescale_interp is None: continue
 
 
 		## Temperature
 		Temp_prof_interp, Temp_rescale_interp = get_halo_data(halo, 'Temp')
-		if Temp_prof_interp is None or Temp_prof_rescale_interp is None: continue
+		if Temp_prof_interp is None or Temp_rescale_interp is None: continue
+
+		# These should be after all the if statements
+		rho_sim.append(rho_prof_interp)
+		rho_rescale.append(rho_rescale_interp)
+
+		Pe_sim.append(Pe_prof_interp)
+		Pe_rescale.append(Pe_rescale_interp)
+
 		Temp_sim.append(Temp_prof_interp)
 		Temp_rescale.append(Temp_rescale_interp)    
 
