@@ -140,7 +140,8 @@ bounds = {'f_H': [0.65, 0.85],
 		'eps1_0': [-0.95, 3],
 		'eps2_0': [-0.95, 3],
 		'gamma_T': [1.1, 5],
-		 'b': [-3, 3]}
+		 'b': [-3, 3],
+		 'c': [-4, 4]}
 
 fid_val = {'f_H': 0.75,
 		'gamma': 1.2,
@@ -151,7 +152,8 @@ fid_val = {'f_H': 0.75,
 		'eps1_0': 0.2,
 		'eps2_0': -0.1,
 	'gamma_T': 2,
-		  'b': 1}
+		  'b': 1,
+		  'c': 1}
 
 std_dev = {'f_H': 0.2,
 		'gamma': 0.2,
@@ -162,7 +164,8 @@ std_dev = {'f_H': 0.2,
 		'eps1_0': 0.2,
 		'eps2_0': 0.2,
 	'gamma_T':0.3,
-		  'b': 0.5}
+		  'b': 0.5,
+		  'c':0.5}
 
 
 #####-------------- Load Data --------------#####
@@ -283,8 +286,8 @@ print('Finished processing simulation data...')
 #####-------------- Prepare for MCMC --------------#####
 fitter = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=Mvir_sim.max()+1e10)
 print('Initialized profile fitter ...')
-fit_par = ['gamma', 'alpha', 'log10_M0', 'beta', 'eps1_0', 'eps2_0', 'gamma_T', 'b']
-par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\\beta', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}', 'b']
+fit_par = ['gamma', 'alpha', 'log10_M0', 'beta', 'eps1_0', 'eps2_0', 'gamma_T', 'b', 'c']
+par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\\beta', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}', 'b', 'c']
 
 starting_point = [fid_val[k] for k in fit_par]
 std = [std_dev[k] for k in fit_par]
@@ -372,35 +375,61 @@ fitter.update_param(fit_par, gd_samples.getMeans())
 
 
 ## Plot median Pe profiles
-plt.figure(figsize=(10, 6))
-plt.loglog(r_bins, np.median(Pe_sim, axis=0), label='Median sim prof')
-plt.loglog(r_bestfit, np.median(Pe_bestfit, axis=0), label='Median theory prof')
+fig, ax = plt.subplots(3, 3, figsize=(18, 12))
+### -------------------------- All halos -------------------------####
+ax[0, 0].loglog(r_bins, np.median(rho_sim, axis=0), label='Median sim prof')
+ax[0, 0].loglog(r_bestfit, np.median(rho_bestfit, axis=0), label='Median theory prof')
+
+ax[0, 2].loglog(r_bins, np.median(Temp_sim, axis=0), label='Median sim prof')
+ax[0, 2].loglog(r_bestfit, np.median(Temp_bestfit, axis=0), label='Median theory prof')
+
+ax[0, 1].loglog(r_bins, np.median(Pe_sim, axis=0), label='Median sim prof')
+ax[0, 1].loglog(r_bestfit, np.median(Pe_bestfit, axis=0), label='Median theory prof')
+
+ax[0, 0].legend()
+
+ax[0, 0].set_ylabel('$\\rho_{gas}$ [GeV/cm$^3$]')
+ax[0, 1].set_ylabel('Temperature [K]')
+ax[0, 2].set_ylabel('$P_e$ [keV/cm$^3$]')
+
+ax[1,1].set_title('All halos')
+
+### -------------------------- High mass halos -------------------------####
+ax[1, 0].loglog(r_bins, np.median(rho_sim[mask_low_mass], ls=':', axis=0))
+ax[1, 0].loglog(r_bestfit, np.median(rho_bestfit[mask_low_mass], ls=':', axis=0))
+
+ax[1, 1].loglog(r_bins, np.median(Temp_sim[mask_low_mass], ls=':', axis=0))
+ax[1, 1].loglog(r_bestfit, np.median(Temp_bestfit[mask_low_mass], ls=':', axis=0))
+
+ax[1, 2].loglog(r_bins, np.median(Pe_sim[mask_low_mass], ls=':', axis=0))
+ax[1, 2].loglog(r_bestfit, np.median(Pe_bestfit[mask_low_mass], ls=':', axis=0))
 
 
-plt.ylabel('$P_e$')
-plt.xlabel('$r/Rvir$')
-plt.legend()
-plt.savefig(f'{save_path}/best_fit_Pe.pdf')
+ax[1, 0].set_ylabel('$\\rho_{gas}$ [GeV/cm$^3$]')
+ax[1, 1].set_ylabel('Temperature [K]')
+ax[1, 2].set_ylabel('$P_e$ [keV/cm$^3$]')
+
+ax[1,1].set_title('13.5<logM<15')
+
+### -------------------------- Low mass halos -------------------------####
+ax[2, 0].loglog(r_bins, np.median(rho_sim[~mask_low_mass], ls='-.', axis=0))
+ax[2, 0].loglog(r_bestfit, np.median(rho_bestfit[~mask_low_mass], ls='-.', axis=0))
+
+ax[2, 1].loglog(r_bins, np.median(Temp_sim[~mask_low_mass], ls='-.', axis=0))
+ax[2, 1].loglog(r_bestfit, np.median(Temp_bestfit[~mask_low_mass], ls='-.', axis=0))
+
+ax[2, 2].loglog(r_bins, np.median(Pe_sim[~mask_low_mass], ls='-.', axis=0))
+ax[2, 2].loglog(r_bestfit, np.median(Pe_bestfit[~mask_low_mass], ls='-.', axis=0))
 
 
-## Plot median rho profiles
-plt.figure(figsize=(10, 6))
-plt.loglog(r_bins, np.median(rho_sim, axis=0), label='Median sim prof')
-plt.loglog(r_bestfit, np.median(rho_bestfit, axis=0), label='Median theory prof')
+ax[2, 0].set_ylabel('$\\rho_{gas}$ [GeV/cm$^3$]')
+ax[2, 1].set_ylabel('Temperature [K]')
+ax[2, 2].set_ylabel('$P_e$ [keV/cm$^3$]')
 
+ax[2, 0].set_xlabel('$r/Rvir$')
+ax[2, 1].set_xlabel('$r/Rvir$')
+ax[2, 2].set_xlabel('$r/Rvir$')
 
-plt.ylabel('$\\rho_{gas}$')
-plt.xlabel('$r/Rvir$')
-plt.legend()
-plt.savefig(f'{save_path}/best_fit_rho.pdf')
+ax[2,1].set_title('11<logM<13.5')
 
-## Plot median Temp. profiles
-plt.figure(figsize=(10, 6))
-plt.loglog(r_bins, np.median(Temp_sim, axis=0), label='Median sim prof')
-plt.loglog(r_bestfit, np.median(Temp_bestfit, axis=0), label='Median theory prof')
-
-
-plt.ylabel('Temperature')
-plt.xlabel('$r/Rvir$')
-plt.legend()
-plt.savefig(f'{save_path}/best_fit_temp.pdf')
+plt.savefig(f'{save_path}/best_fit_profiles.pdf')
