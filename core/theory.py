@@ -1,7 +1,7 @@
 import numpy as np
 
 import camb
-#from classy import Class
+from classy import Class
 import pyhmcode
 import Pk_library as PKL
 import hmcode  # HMCode-Python
@@ -20,7 +20,7 @@ def get_CLASS_Pk(k_sim, input_dict=None, binned=False, z=0.0):
 		'H0':0.704*100, #cosmology paramater
 		'z_max_pk' : str(zmax),
 		'non linear' : 'halofit',#option for computing non-linear power spectum
-		'P_k_max_1/Mpc':20.0,
+		'P_k_max_1/Mpc':30.0,
 		'sigma8': 0.809, #cosmology paramater
 		'n_s': 0.963 , #cosmology paramater
 		'Omega_b': 0.0456, #cosmology paramater
