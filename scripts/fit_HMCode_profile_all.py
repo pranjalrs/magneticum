@@ -26,7 +26,6 @@ from analytic_profile import Profile
 import post_processing
 
 import ipdb
-
 #####-------------- Parse Args --------------#####
 
 parser = argparse.ArgumentParser()
@@ -105,6 +104,9 @@ def likelihood(theory_prof, field):
 	num = ma.array(num, mask=idx, fill_value=0)
 	chi2 = 0.5*np.sum(num/denom)  # Sum over radial bins
 
+	if not np.isfinite(chi2):
+		return -np.inf
+
 	return -chi2
 
 
@@ -124,13 +126,28 @@ def joint_likelihood(x, mass_list, z=0):
 
 	if 'Pe' in field  or 'all' in field:
 		loglike += likelihood(Pe_theory, 'Pe')
-
+        
+		if np.isnan(loglike):
+			print(f'Likelihood returned: {loglike} for Pe profile')
+			print(f'Fit parameters are: {fit_par}')
+			print(f'Sampled values are: {x}')
+        
+        
 	if 'rho' in field or 'all' in field:
 		loglike += likelihood(rho_theory, 'rho')
+		if np.isnan(loglike):
+			print(f'Likelihood returned: {loglike} for rho profile')
+			print(f'Fit parameters are: {fit_par}')
+			print(f'Sampled values are: {x}')
 
 	if 'Temp' in field  or 'all' in field:
 		loglike += likelihood(Temp_theory, 'Temp')
+		if np.isnan(loglike):
+			print(f'Likelihood returned: {loglike} for Temp profile')
+			print(f'Fit parameters are: {fit_par}')
+			print(f'Sampled values are: {x}')
 
+	print(f'Sampled values are: {x} \t with likelihood {loglike}')
 	return loglike
 
 
@@ -142,9 +159,11 @@ bounds = {'f_H': [0.65, 0.85],
 		'beta': [0.4, 0.8],
 		'eps1_0': [-0.95, 3],
 		'eps2_0': [-0.95, 3],
-		'gamma_T': [1.1, 5],
-		 'b': [-3, 3],
-		 'c': [-4, 4]}
+		'gamma_T_1': [1.1, 5.5],
+		'gamma_T_2': [1.1, 5.5],
+		 'b': [0, 2],
+		'alpha_nt': [0, 2],
+		'n_nt': [0, 2]}
 
 fid_val = {'f_H': 0.75,
 		'gamma': 1.2,
@@ -154,9 +173,11 @@ fid_val = {'f_H': 0.75,
 		'beta': 0.6,
 		'eps1_0': 0.2,
 		'eps2_0': -0.1,
-	'gamma_T': 2,
-		  'b': 1,
-		  'c': 1}
+		'gamma_T_1': 2,
+		'gamma_T_2': 2,
+		  'b': 0.1,
+		'alpha_nt':1,
+		'n_nt':1}
 
 std_dev = {'f_H': 0.2,
 		'gamma': 0.2,
@@ -166,9 +187,11 @@ std_dev = {'f_H': 0.2,
 		'beta': 0.2,
 		'eps1_0': 0.2,
 		'eps2_0': 0.2,
-	'gamma_T':0.3,
-		  'b': 0.5,
-		  'c':0.5}
+		'gamma_T_1':0.3,
+		'gamma_T_2':0.3,
+		  'b': 0.1,
+		'alpha_nt':0.4,
+		'n_nt':0.4}
 
 
 #####-------------- Load Data --------------#####
@@ -293,8 +316,8 @@ print('Finished processing simulation data...')
 #####-------------- Prepare for MCMC --------------#####
 fitter = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=Mvir_sim.max()+1e10)
 print('Initialized profile fitter ...')
-fit_par = ['gamma', 'alpha', 'log10_M0', 'beta', 'eps1_0', 'eps2_0', 'gamma_T', 'b', 'c']
-par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\\beta', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}', 'b', 'c']
+fit_par = ['gamma', 'alpha', 'log10_M0', 'eps1_0', 'eps2_0', 'gamma_T_1', 'gamma_T_2', 'alpha_nt', 'n_nt']
+par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}^1', '\Gamma_\mathrm{T}^2', '\\alpha_{nt}', 'n_{nt}']
 
 starting_point = [fid_val[k] for k in fit_par]
 std = [std_dev[k] for k in fit_par]
@@ -317,6 +340,7 @@ print(f'Finished initializing {nwalkers} walkers...')
 field = args.field.strip('"').split(',')
 print(f'Using Likelihood for {field} field(s)')
 
+
 #####-------------- RUN MCMC --------------#####
 print('Running MCMC..')
 
@@ -336,7 +360,7 @@ else:
 	sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
 
 #####-------------- Plot and Save --------------#####
-save_path = f'../../magneticum-data/data/emcee/fit_{args.field}_all_halos/run{run}'
+save_path = f'../../magneticum-data/data/emcee/prof_{args.field}_halos_all/run{run}'
 if not os.path.exists(save_path):
 	# If the folder does not exist, create it and break the loop
 	os.makedirs(save_path)
@@ -387,11 +411,11 @@ fig, ax = plt.subplots(3, 3, figsize=(18, 12))
 ax[0, 0].loglog(r_bins, np.median(rho_sim, axis=0), label='Median sim prof')
 ax[0, 0].loglog(r_bestfit, np.median(rho_bestfit, axis=0), label='Median theory prof')
 
-ax[0, 2].loglog(r_bins, np.median(Temp_sim, axis=0), label='Median sim prof')
-ax[0, 2].loglog(r_bestfit, np.median(Temp_bestfit, axis=0), label='Median theory prof')
+ax[0, 1].loglog(r_bins, np.median(Temp_sim, axis=0), label='Median sim prof')
+ax[0, 1].loglog(r_bestfit, np.median(Temp_bestfit, axis=0), label='Median theory prof')
 
-ax[0, 1].loglog(r_bins, np.median(Pe_sim, axis=0), label='Median sim prof')
-ax[0, 1].loglog(r_bestfit, np.median(Pe_bestfit, axis=0), label='Median theory prof')
+ax[0, 2].loglog(r_bins, np.median(Pe_sim, axis=0), label='Median sim prof')
+ax[0, 2].loglog(r_bestfit, np.median(Pe_bestfit, axis=0), label='Median theory prof')
 
 ax[0, 0].legend()
 
@@ -402,14 +426,14 @@ ax[0, 2].set_ylabel('$P_e$ [keV/cm$^3$]')
 ax[1,1].set_title('All halos')
 
 ### -------------------------- High mass halos -------------------------####
-ax[1, 0].loglog(r_bins, np.median(rho_sim[mask_low_mass], ls=':', axis=0))
-ax[1, 0].loglog(r_bestfit, np.median(rho_bestfit[mask_low_mass], ls=':', axis=0))
+ax[1, 0].loglog(r_bins, np.median(rho_sim[mask_low_mass],axis=0), ls=':')
+ax[1, 0].loglog(r_bestfit, np.median(rho_bestfit[mask_low_mass], axis=0), ls=':')
 
-ax[1, 1].loglog(r_bins, np.median(Temp_sim[mask_low_mass], ls=':', axis=0))
-ax[1, 1].loglog(r_bestfit, np.median(Temp_bestfit[mask_low_mass], ls=':', axis=0))
+ax[1, 1].loglog(r_bins, np.median(Temp_sim[mask_low_mass], axis=0), ls=':')
+ax[1, 1].loglog(r_bestfit, np.median(Temp_bestfit[mask_low_mass], axis=0), ls=':')
 
-ax[1, 2].loglog(r_bins, np.median(Pe_sim[mask_low_mass], ls=':', axis=0))
-ax[1, 2].loglog(r_bestfit, np.median(Pe_bestfit[mask_low_mass], ls=':', axis=0))
+ax[1, 2].loglog(r_bins, np.median(Pe_sim[mask_low_mass], axis=0), ls=':')
+ax[1, 2].loglog(r_bestfit, np.median(Pe_bestfit[mask_low_mass], axis=0), ls=':')
 
 
 ax[1, 0].set_ylabel('$\\rho_{gas}$ [GeV/cm$^3$]')
@@ -419,14 +443,14 @@ ax[1, 2].set_ylabel('$P_e$ [keV/cm$^3$]')
 ax[1,1].set_title('13.5<logM<15')
 
 ### -------------------------- Low mass halos -------------------------####
-ax[2, 0].loglog(r_bins, np.median(rho_sim[~mask_low_mass], ls='-.', axis=0))
-ax[2, 0].loglog(r_bestfit, np.median(rho_bestfit[~mask_low_mass], ls='-.', axis=0))
+ax[2, 0].loglog(r_bins, np.median(rho_sim[~mask_low_mass], axis=0), ls='-.')
+ax[2, 0].loglog(r_bestfit, np.median(rho_bestfit[~mask_low_mass], axis=0), ls='-.')
 
-ax[2, 1].loglog(r_bins, np.median(Temp_sim[~mask_low_mass], ls='-.', axis=0))
-ax[2, 1].loglog(r_bestfit, np.median(Temp_bestfit[~mask_low_mass], ls='-.', axis=0))
+ax[2, 1].loglog(r_bins, np.median(Temp_sim[~mask_low_mass], axis=0), ls='-.')
+ax[2, 1].loglog(r_bestfit, np.median(Temp_bestfit[~mask_low_mass], axis=0), ls='-.')
 
-ax[2, 2].loglog(r_bins, np.median(Pe_sim[~mask_low_mass], ls='-.', axis=0))
-ax[2, 2].loglog(r_bestfit, np.median(Pe_bestfit[~mask_low_mass], ls='-.', axis=0))
+ax[2, 2].loglog(r_bins, np.median(Pe_sim[~mask_low_mass], axis=0), ls='-.')
+ax[2, 2].loglog(r_bestfit, np.median(Pe_bestfit[~mask_low_mass], axis=0), ls='-.')
 
 
 ax[2, 0].set_ylabel('$\\rho_{gas}$ [GeV/cm$^3$]')
