@@ -127,27 +127,13 @@ def joint_likelihood(x, mass_list, z=0):
 	if 'Pe' in field  or 'all' in field:
 		loglike += likelihood(Pe_theory, 'Pe')
         
-		if np.isnan(loglike):
-			print(f'Likelihood returned: {loglike} for Pe profile')
-			print(f'Fit parameters are: {fit_par}')
-			print(f'Sampled values are: {x}')
-        
         
 	if 'rho' in field or 'all' in field:
 		loglike += likelihood(rho_theory, 'rho')
-		if np.isnan(loglike):
-			print(f'Likelihood returned: {loglike} for rho profile')
-			print(f'Fit parameters are: {fit_par}')
-			print(f'Sampled values are: {x}')
 
 	if 'Temp' in field  or 'all' in field:
 		loglike += likelihood(Temp_theory, 'Temp')
-		if np.isnan(loglike):
-			print(f'Likelihood returned: {loglike} for Temp profile')
-			print(f'Fit parameters are: {fit_par}')
-			print(f'Sampled values are: {x}')
 
-	print(f'Sampled values are: {x} \t with likelihood {loglike}')
 	return loglike
 
 
@@ -197,7 +183,7 @@ std_dev = {'f_H': 0.2,
 #####-------------- Load Data --------------#####
 data_path = '../../magneticum-data/data/profiles_median'
 files = glob.glob(f'{data_path}/Box1a/Pe_Pe_Mead_Temp_matter_cdm_gas_z=0.00_mvir_3.2E+13_1.0E+16.pkl')
-files += glob.glob(f'{data_path}/Box2/Pe_Pe_Mead_Temp_matter_cdm_gas_z=0.00_mvir_1.0E+11_1.0E+13.pkl')
+files += glob.glob(f'{data_path}/Box2/Pe_Pe_Mead_Temp_matter_cdm_gas_z=0.00_mvir_1.0E+12_1.0E+13.pkl')
 
 ## We will interpolate all measured profiles to the same r_bins as 
 ## the analytical profile for computational efficiency
@@ -269,7 +255,7 @@ Mvir_sim = Mvir_sim[sorting_indices]
 
 # Now compute intrinsic scatter
 # Since low mass halos have a large scatter we compute it separately for them
-mask_low_mass = Mvir_sim>=10**(13.5)
+mask_low_mass = Mvir_sim>=10**(13)
 
 ####################### Pressure ###############################
 Pe_rescale = np.vstack(Pe_rescale)[sorting_indices]
@@ -316,8 +302,8 @@ print('Finished processing simulation data...')
 #####-------------- Prepare for MCMC --------------#####
 fitter = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=Mvir_sim.max()+1e10)
 print('Initialized profile fitter ...')
-fit_par = ['gamma', 'alpha', 'log10_M0', 'eps1_0', 'eps2_0', 'gamma_T_1', 'gamma_T_2', 'alpha_nt', 'n_nt']
-par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}^1', '\Gamma_\mathrm{T}^2', '\\alpha_{nt}', 'n_{nt}']
+fit_par = ['gamma', 'alpha', 'log10_M0', 'eps1_0', 'eps2_0', 'gamma_T_1', 'gamma_T_2']
+par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}^1', '\Gamma_\mathrm{T}^2']
 
 starting_point = [fid_val[k] for k in fit_par]
 std = [std_dev[k] for k in fit_par]
@@ -399,7 +385,6 @@ plt.savefig(f'{save_path}/triangle_plot.pdf')
 ########## Compare best-fit profiles ##########
 c = ['r', 'b', 'g', 'k']
 
-bins = [13.5, 14, 14.5, 15]
 # Fiducial HMCode profiles
 fitter.update_param(fit_par, gd_samples.getMeans())
 (Pe_bestfit, rho_bestfit, Temp_bestfit), r_bestfit = fitter.get_Pe_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0, return_rho=True, return_Temp=True)
@@ -408,14 +393,18 @@ fitter.update_param(fit_par, gd_samples.getMeans())
 ## Plot median Pe profiles
 fig, ax = plt.subplots(3, 3, figsize=(18, 12))
 ### -------------------------- All halos -------------------------####
-ax[0, 0].loglog(r_bins, np.median(rho_sim, axis=0), label='Median sim prof')
-ax[0, 0].loglog(r_bestfit, np.median(rho_bestfit, axis=0), label='Median theory prof')
+rho_sim[rho_sim==0] = np.nan
+Temp_sim[Temp_sim==0] = np.nan
+Pe_sim[Pe_sim==0] = np.nan
 
-ax[0, 1].loglog(r_bins, np.median(Temp_sim, axis=0), label='Median sim prof')
-ax[0, 1].loglog(r_bestfit, np.median(Temp_bestfit, axis=0), label='Median theory prof')
+ax[0, 0].loglog(r_bins, np.nanmedian(rho_sim, axis=0), label='Magneticum (median)')
+ax[0, 0].loglog(r_bestfit, np.median(rho_bestfit, axis=0), label='Best fit (median)')
 
-ax[0, 2].loglog(r_bins, np.median(Pe_sim, axis=0), label='Median sim prof')
-ax[0, 2].loglog(r_bestfit, np.median(Pe_bestfit, axis=0), label='Median theory prof')
+ax[0, 1].loglog(r_bins, np.nanmedian(Temp_sim, axis=0))
+ax[0, 1].loglog(r_bestfit, np.median(Temp_bestfit, axis=0))
+
+ax[0, 2].loglog(r_bins, np.nanmedian(Pe_sim, axis=0))
+ax[0, 2].loglog(r_bestfit, np.median(Pe_bestfit, axis=0))
 
 ax[0, 0].legend()
 
@@ -426,31 +415,33 @@ ax[0, 2].set_ylabel('$P_e$ [keV/cm$^3$]')
 ax[1,1].set_title('All halos')
 
 ### -------------------------- High mass halos -------------------------####
-ax[1, 0].loglog(r_bins, np.median(rho_sim[mask_low_mass],axis=0), ls=':')
-ax[1, 0].loglog(r_bestfit, np.median(rho_bestfit[mask_low_mass], axis=0), ls=':')
+ax[1, 0].errorbar(r_bins, np.log(np.nanmedian(rho_sim[mask_low_mass], axis=0)), yerr=sigma_intr_rho_init_high_mass, ls='-.', label='Magneticum (median)')
+ax[1, 0].plot(r_bestfit, np.log(np.median(rho_bestfit[mask_low_mass], axis=0).value), ls='-.', label='Best fit (median)')
 
-ax[1, 1].loglog(r_bins, np.median(Temp_sim[mask_low_mass], axis=0), ls=':')
-ax[1, 1].loglog(r_bestfit, np.median(Temp_bestfit[mask_low_mass], axis=0), ls=':')
+ax[1, 1].errorbar(r_bins, np.log(np.nanmedian(Temp_sim[mask_low_mass], axis=0)), yerr=sigma_intr_Temp_init_high_mass, ls='-.')
+ax[1, 1].plot(r_bestfit, np.log(np.median(Temp_bestfit[mask_low_mass], axis=0).value), ls='-.')
 
-ax[1, 2].loglog(r_bins, np.median(Pe_sim[mask_low_mass], axis=0), ls=':')
-ax[1, 2].loglog(r_bestfit, np.median(Pe_bestfit[mask_low_mass], axis=0), ls=':')
+
+ax[1, 2].errorbar(r_bins, np.log(np.nanmedian(Pe_sim[mask_low_mass], axis=0)), yerr=sigma_intr_Pe_init_high_mass, ls='-.')
+ax[1, 2].plot(r_bestfit, np.log(np.median(Pe_bestfit[mask_low_mass], axis=0).value), ls='-.')
 
 
 ax[1, 0].set_ylabel('$\\rho_{gas}$ [GeV/cm$^3$]')
 ax[1, 1].set_ylabel('Temperature [K]')
 ax[1, 2].set_ylabel('$P_e$ [keV/cm$^3$]')
 
-ax[1,1].set_title('13.5<logM<15')
+ax[1,1].set_title('13<logM<15')
 
 ### -------------------------- Low mass halos -------------------------####
-ax[2, 0].loglog(r_bins, np.median(rho_sim[~mask_low_mass], axis=0), ls='-.')
-ax[2, 0].loglog(r_bestfit, np.median(rho_bestfit[~mask_low_mass], axis=0), ls='-.')
+ax[1, 0].errorbar(r_bins, np.log(np.nanmedian(rho_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_rho_init_low_mass, ls='-.', label='Magneticum (median)')
+ax[1, 0].plot(r_bestfit, np.log(np.median(rho_bestfit[~mask_low_mass], axis=0).value), ls='-.', label='Best fit (median)')
 
-ax[2, 1].loglog(r_bins, np.median(Temp_sim[~mask_low_mass], axis=0), ls='-.')
-ax[2, 1].loglog(r_bestfit, np.median(Temp_bestfit[~mask_low_mass], axis=0), ls='-.')
+ax[1, 1].errorbar(r_bins, np.log(np.nanmedian(Temp_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_Temp_init_low_mass, ls='-.')
+ax[1, 1].plot(r_bestfit, np.log(np.median(Temp_bestfit[~mask_low_mass], axis=0).value), ls='-.')
 
-ax[2, 2].loglog(r_bins, np.median(Pe_sim[~mask_low_mass], axis=0), ls='-.')
-ax[2, 2].loglog(r_bestfit, np.median(Pe_bestfit[~mask_low_mass], axis=0), ls='-.')
+
+ax[1, 2].errorbar(r_bins, np.log(np.nanmedian(Pe_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_Pe_init_low_mass, ls='-.')
+ax[1, 2].plot(r_bestfit, np.log(np.median(Pe_bestfit[~mask_low_mass], axis=0).value), ls='-.')
 
 
 ax[2, 0].set_ylabel('$\\rho_{gas}$ [GeV/cm$^3$]')
@@ -461,6 +452,6 @@ ax[2, 0].set_xlabel('$r/Rvir$')
 ax[2, 1].set_xlabel('$r/Rvir$')
 ax[2, 2].set_xlabel('$r/Rvir$')
 
-ax[2,1].set_title('11<logM<13.5')
+ax[2,1].set_title('12<logM<13')
 
 plt.savefig(f'{save_path}/best_fit_profiles.pdf')
