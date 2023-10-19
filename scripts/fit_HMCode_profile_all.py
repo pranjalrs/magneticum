@@ -346,7 +346,7 @@ else:
 	sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
 
 #####-------------- Plot and Save --------------#####
-save_path = f'../../magneticum-data/data/emcee/prof_{args.field}_halos_all/run{run}'
+save_path = f'../../magneticum-data/data/emcee/prof_{args.field}_halos_all/{run}'
 if not os.path.exists(save_path):
 	# If the folder does not exist, create it and break the loop
 	os.makedirs(save_path)
