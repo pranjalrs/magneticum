@@ -112,6 +112,7 @@ with tqdm(total=nhalo) as pbar:
 	inds = np.where((sort_by >= low_bin) & (sort_by < high_bin))[0]
 
 	## Randomly choose n halos
+	np.random.seed(0)
 	if len(inds)>nhalo: inds = np.random.choice(inds, nhalo, replace=False)
 
 	halo_positions = halo_positions[inds]
@@ -147,13 +148,13 @@ if args.isSave is True:
 
 	if binning == 'm500c':	
 		joblib.dump(data, f'../../magneticum-data/data/profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
-	
+
 	if binning == 'nu_m500c':
 		joblib.dump(data, f'../../magneticum-data/data/profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1f}_{high_bin:.1f}.pkl')
-	
+
 	if binning == 'mvir':
 		joblib.dump(data, f'../../magneticum-data/data/profiles_{estimator}/{box}/{"_".join(field)}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
-	
+
 	if args.test is True:
 		os.makedirs(f'../../magneticum-data/data/test/profiles_{estimator}/{box}/', exist_ok=True)
 		np.save(f'../../magneticum-data/data/test/profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.npy', data)
