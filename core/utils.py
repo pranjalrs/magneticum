@@ -244,7 +244,7 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, z, little_
 		if field in ['Pe_Mead', 'matter', 'gas', 'cdm']:
 			profile, r, sigma_prof, sigma_lnprof = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator='sum')
 
-		else:            
+		else:
 			profile, r, sigma_prof, sigma_lnprof = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator)
 
 		profiles_dict[field][0] = profile
@@ -259,8 +259,8 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 	"""
 	To Do: Update Doctstring
 	"""
-	rmin, rmax = 0.1*halo_radius, 3*halo_radius
-	radial_bins = np.logspace(np.log10(rmin), np.log10(rmax), 31)  # Radial bin edges  (0.1-3)*R500c kpc/h
+	rmin, rmax = 0.1*halo_radius, 2*halo_radius
+	radial_bins = np.logspace(np.log10(rmin), np.log10(rmax), 17)  # Radial bin edges
 
 	## g3read.to_spherical returns an array of [r, theta, phi]
 	part_distance_from_center = {}
@@ -271,7 +271,7 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 		else:
 			#part_distance_from_center[this_ptype] = []
 			ptype.remove(this_ptype)
-			
+
 
 	weighted_bin_center = np.ones(len(radial_bins)-1, dtype='float32')
 	profile = np.zeros(len(radial_bins)-1, dtype='float32')
