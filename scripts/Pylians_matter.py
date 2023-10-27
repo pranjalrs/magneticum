@@ -82,4 +82,4 @@ if __name__== '__main__':
 
 	Pk = PKL.Pk(delta, BoxSize, axis, MAS, verbose)
 
-	np.savetxt(f'../../magneticum-data/data/Pylians/Pk_matter/{sim_box}/Pk_{sim_name}_z={z:.2f}_R{grid}.txt', np.column_stack((Pk.k3D, Pk.Pk[:, 0)), delimiter='\t')
+	np.savetxt(f'../../magneticum-data/data/Pylians/Pk_matter/{sim_box}/Pk_{sim_name}_z={z:.2f}_R{grid}.txt', np.column_stack((Pk.k3D, Pk.Pk[:, 0])), delimiter='\t')
