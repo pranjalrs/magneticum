@@ -16,6 +16,7 @@ sys.path.append('../core/')
 
 from gadget import Gadget
 
+import ipdb
 
 def get_mean_mass_per_particle(Y):
 	"""Calculates mean mass per particle assuming a completely ionized gas (H + He)
@@ -167,6 +168,13 @@ def get_field_for_halo(particle_data, mask, z, little_h, field, r1=None, r2=None
 		Pe_physical = get_physical_electron_pressure_Mead(mass, Temp, Y, shell_volume, z, little_h)
 		return Pe_physical
 
+	if field == 'v_disp':
+		mass = particle_data[0]['MASS'][mask[0]]
+		velocity = particle_data[0]['VEL '][mask[0]]*Gadget.units.velocity  # v_comoving / sqrt(1+z)
+		velocity_comoving = (velocity/(1+z)**0.5).to(u.km/u.s).value
+		v_dispersion = 1/3*mass*(velocity[:, 0]**2 + velocity[:, 1]**2 + velocity[:, 2]**2)/np.sum(mass)
+
+
 	if field == "Temp":
 		Temp = particle_data[0]['TEMP'][mask[0]]*Gadget.units.Temperature
 		return Temp
@@ -240,10 +248,10 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, z, little_
 	profiles_dict = {field: [[], [], [], []] for field in fields}
 
 	for field in fields:
-		if field in ['Pe_Mead', 'matter', 'gas', 'cdm']:
+		if field in ['Pe_Mead', 'matter', 'gas', 'cdm', 'v_disp']:
 			profile, r, sigma_prof, sigma_lnprof = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator='sum')
 
-		else:            
+		else:
 			profile, r, sigma_prof, sigma_lnprof = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator)
 
 		profiles_dict[field][0] = profile
@@ -258,8 +266,8 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 	"""
 	To Do: Update Doctstring
 	"""
-	rmin, rmax = 0.1*halo_radius, 3*halo_radius
-	radial_bins = np.logspace(np.log10(rmin), np.log10(rmax), 31)  # Radial bin edges  (0.1-3)*R500c kpc/h
+	rmin, rmax = 0.1*halo_radius, 2*halo_radius
+	radial_bins = np.logspace(np.log10(rmin), np.log10(rmax), 17)  # Radial bin edges
 
 	## g3read.to_spherical returns an array of [r, theta, phi]
 	part_distance_from_center = {}
@@ -270,7 +278,7 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 		else:
 			#part_distance_from_center[this_ptype] = []
 			ptype.remove(this_ptype)
-			
+
 
 	weighted_bin_center = np.ones(len(radial_bins)-1, dtype='float32')
 	profile = np.zeros(len(radial_bins)-1, dtype='float32')
@@ -290,24 +298,26 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 		if np.sum([len(mask[this_ptype]) for this_ptype in ptype])!=0:
 			this_bin_field = get_field_for_halo(particle_data, mask, z, little_h, field, r_low, r_up).value
 			n_part = len(this_bin_field)  # No. of particles
-
+			
 			if estimator == 'median':
 				profile[bin_index] = np.median(this_bin_field)
-				sigma_prof[bin_index] = sigma_percentile(this_bin_field)/n_part**0.5
-				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))/n_part**0.5
-
 
 			elif estimator == 'mean':
 				profile[bin_index] = np.mean(this_bin_field)
 				sigma_prof[bin_index] = sigma_percentile(this_bin_field)/n_part**0.5
-
 				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))/n_part**0.5
 
 
 			elif estimator == 'sum':
 				profile[bin_index] = np.sum(this_bin_field)
-				sigma_prof[bin_index] = sigma_percentile(this_bin_field)*n_part**0.5
-				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))*n_part**0.5
+			
+			try:
+				sigma_prof[bin_index] = sigma_percentile(this_bin_field)/n_part**0.5
+				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))/n_part**0.5
+			except:
+				sigma_prof[bin_index] = 0
+				sigma_lnprof[bin_index] = 0
+				
 
 			# Concatenate positions and masses for all ptypes
 			all_part_distance_from_center = []
