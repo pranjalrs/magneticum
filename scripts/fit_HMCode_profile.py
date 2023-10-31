@@ -33,14 +33,15 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--field')
 parser.add_argument('--test', type=bool, default=False)
 parser.add_argument('--run', type=str)
+parser.add_argument('--niter', type=int)
 parser.add_argument('--nsteps', type=int)
 parser.add_argument('--mmin', type=float)
 parser.add_argument('--mmax', type=float)
 args = parser.parse_args()
 test = args.test
-run = args.run
+run, niter = args.run, args.niter
 mmin, mmax = args.mmin, args.mmax
-
+field = args.field.strip('"').split(',')
 #####-------------- Likelihood --------------#####
 
 def nan_interp(x, y):
@@ -60,9 +61,8 @@ def get_scatter(x, xbar):
 
 	return np.array(std)
 
-def recompute_best_fit_scatter(sampler):
-	gd_samples = getdist.MCSamples(samples=sampler.get_chain(flat=True, discard=int(0.9*nsteps)))
-	fitter.update_param(fit_par, gd_samples.getMeans())
+def recompute_best_fit_scatter(params):
+	fitter.update_param(fit_par, params)
 	(Pe_bestfit, rho_bestfit, Temp_bestfit), r_bestfit = fitter.get_Pe_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0, return_rho=True, return_Temp=True)
 
 	median_Pe = np.median(Pe_bestfit[mask]/Pe_bestfit[mask][:, -1][:, np.newaxis], axis=0)
@@ -118,114 +118,6 @@ def joint_likelihood(x, mass_list, z=0):
 
 	return loglike
 
-def rerun_mcmc(niter, p0_walkers=None, sampler=None):
-	sigma_intr_rho, sigma_intr_Temp, sigma_intr_Pe = globals()['sigma_intr_rho'], globals()['sigma_intr_Temp'], globals()['sigma_intr_Pe']
-	if sampler is not None:   
-		sigma_intr_Pe, sigma_intr_rho, sigma_intr_Temp, params = recompute_best_fit_scatter(sampler)
-		print(params)
-		p0_walkers = emcee.utils.sample_ball(params, std, size=nwalkers)
-		for i, key in enumerate(fit_par):
-			low_lim, up_lim = bounds[fit_par[i]]
-
-			for walker in range(nwalkers):
-				while p0_walkers[walker, i] < low_lim or p0_walkers[walker, i] > up_lim:
-					p0_walkers[walker, i] = np.random.rand()*std[i] + starting_point[i]
-
-	with MPIPool() as pool:
-		if not pool.is_master():
-			pool.wait()
-			sys.exit(0)
-		print('Testing interpolator...')
-#		test_interpolator(p0_walkers)
-
-		sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, pool=pool, args=[Mvir_sim])
-		print('Intialized sampler...')
-		sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
-#####-------------- Plot and Save --------------#####
-	save_path = f'../../magneticum-data/data/emcee_new/prof_{args.field}_halos_bin/{run}'
-	if not os.path.exists(save_path):
-	# If the folder does not exist, create it and break the loop
-		os.makedirs(save_path)
-
-	walkers = sampler.get_chain()
-	np.save(f'{save_path}/all_walkers_{niter}.npy', walkers)
-
-	chain = sampler.get_chain(flat=True)
-	log_prob_samples = sampler.get_log_prob(flat=True)
-
-	all_samples = np.concatenate((chain, log_prob_samples[:, None]), axis=1)
-	np.savetxt(f'{save_path}/all_samples_{niter}.txt', all_samples)
-
-	np.savetxt(f'{save_path}/sigma_intr_{niter}.txt',  np.column_stack((sigma_intr_rho, sigma_intr_Temp, sigma_intr_Pe)))
-
-	fig, ax = plt.subplots(len(fit_par), 1, figsize=(10, 1.5*len(fit_par)))
-	ax = ax.flatten()
-
-	for i in range(len(fit_par)):
-		ax[i].plot(walkers[:, :, i])
-		ax[i].set_ylabel(f'${par_latex_names[i]}$')
-		ax[i].set_xlabel('Step #')
-
-	plt.savefig(f'{save_path}/trace_plot_{niter}.pdf')
-
-	#### Discard 0.9*steps and make triangle plot
-
-	gd_samples = getdist.MCSamples(samples=sampler.get_chain(flat=True, discard=int(0.9*nsteps)), names=fit_par, labels=par_latex_names)
-
-	########## Compare best-fit profiles ##########
-	c = ['r', 'b', 'g', 'k']
-
-	bins = [13.5, 14, 14.5, 15]
-	# Fiducial HMCode profiles
-	fitter.update_param(fit_par, gd_samples.getMeans())
-	(Pe_bestfit, rho_bestfit, Temp_bestfit), r_bestfit = fitter.get_Pe_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0, return_rho=True, return_Temp=True)
-
-
-	## Plot median Pe profiles
-	fig, ax = plt.subplots(1, 3, figsize=(14, 4))
-
-	rho_sim[rho_sim==0] = np.nan
-
-	ax[0].errorbar(r_bins, np.log(np.nanmedian(rho_sim[mask], axis=0)), yerr=sigma_intr_rho, ls='-.', label='Magneticum (median)')
-	ax[0].plot(r_bestfit, np.log(np.median(rho_bestfit[mask], axis=0).value), ls='-.', label='Best fit (median)')
-
-	Temp_sim[Temp_sim==0] = np.nan
-	ax[1].errorbar(r_bins, np.log(np.nanmedian(Temp_sim[mask], axis=0)), yerr=sigma_intr_Temp, ls='-.')
-	ax[1].plot(r_bestfit, np.log(np.median(Temp_bestfit[mask], axis=0).value), ls='-.')
-
-
-	Pe_sim[Pe_sim==0] = np.nan
-	ax[2].errorbar(r_bins, np.log(np.nanmedian(Pe_sim[mask], axis=0)), yerr=sigma_intr_Pe, ls='-.')
-	ax[2].plot(r_bestfit, np.log(np.median(Pe_bestfit[mask], axis=0).value), ls='-.')
-
-	ax[0].set_xlim(0.1, 1.1)
-	ax[1].set_xlim(0.1, 1.1)
-	ax[2].set_xlim(0.1, 1.1)
-
-	ax[0].set_xscale('log')
-	ax[1].set_xscale('log')
-	ax[2].set_xscale('log')
-
-	ax[0].set_ylabel('$\ln \\rho_{gas}$ [GeV/cm$^3$]')
-	ax[1].set_ylabel('$\ln$ Temperature [K]')
-	ax[2].set_ylabel('$\ln P_e$ [keV/cm$^3$]')
-
-	ax[0].set_xlabel('$r/Rvir$')
-	ax[1].set_xlabel('$r/Rvir$')
-	ax[2].set_xlabel('$r/Rvir$')
-
-	ax[1].set_title(f'{mmin}<logM<{mmax}')
-	ax[0].legend()
-	plt.savefig(f'{save_path}/best_fit_profiles_{niter}.pdf', bbox_inches='tight')
-
-
-	#### make triangle plot
-	plt.figure()
-	g = plots.get_subplot_plotter()
-	g.triangle_plot(gd_samples, axis_marker_lw=2, marker_args={'lw':2}, line_args={'lw':1}, title_limit=2)
-	plt.savefig(f'{save_path}/triangle_plot_{niter}.pdf')
-	return sampler
-
 bounds = {'f_H': [0.65, 0.85],
                 'gamma': [1.1, 5],
                 'alpha': [0.1, 2.5],
@@ -269,6 +161,7 @@ std_dev = {'f_H': 0.2,
                 'n_nt':0.4}
 
 #####-------------- Load Data --------------#####
+save_path = f'../../magneticum-data/data/emcee_new/prof_{args.field}_halos_bin/{run}'
 data_path = '../../magneticum-data/data/profiles_median'
 files = glob.glob(f'{data_path}/Box1a/Pe_Pe_Mead_Temp_matter_cdm_gas_v_disp_z=0.00_mvir_1.0E+13_1.0E+16.pkl')
 files += glob.glob(f'{data_path}/Box2/Pe_Pe_Mead_Temp_matter_cdm_gas_v_disp_z=0.00_mvir_1.0E+12_1.0E+13.pkl')
@@ -402,6 +295,13 @@ ndim = len(fit_par)
 nwalkers= 40
 nsteps = args.nsteps
 
+if niter>1:
+	print('Recomputing scatter using best fit parameters from previous iteration...')
+	best_params_prev_iter = np.loadtxt(f'{save_path}/best_params_{niter-1}.txt', skiprows=1)
+	sigma_intr_Pe, sigma_intr_rho, sigma_intr_Temp, params = recompute_best_fit_scatter(params)
+	starting_point = best_params_prev_iter
+
+
 p0_walkers = emcee.utils.sample_ball(starting_point, std, size=nwalkers)
 
 for i, key in enumerate(fit_par):
@@ -413,7 +313,6 @@ for i, key in enumerate(fit_par):
 
 print(f'Finished initializing {nwalkers} walkers...')
 
-field = args.field.strip('"').split(',')
 print(f'Using Likelihood for {field} field(s)')
 
 def test_interpolator(walkers):
@@ -427,15 +326,16 @@ def test_interpolator(walkers):
 print('Running MCMC..')
 
 if test is False:
-	sampler = rerun_mcmc(niter=1, p0_walkers=p0_walkers, sampler=None)
+	with MPIPool() as pool:
+		if not pool.is_master():
+			pool.wait()
+			sys.exit(0)
+		print('Testing interpolator...')
+		test_interpolator(p0_walkers)
 
-	## Round 2: Recompute intrinsic scatter for best-fit and run MCMC again
-	print('Starting second MCMC round...')
-	#sampler = rerun_mcmc(niter=2, sampler=sampler)
-	sampler = rerun_mcmc(niter=2, p0_walkers=p0_walkers, sampler=None)
-
-	print('Starting third MCMC round...')
-	sampler = rerun_mcmc(niter=3, sampler=sampler)
+		sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, pool=pool, args=[Mvir_sim])
+		print('Intialized sampler...')
+		sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
 
 else:
 	print('Testing interpolator...')
@@ -478,3 +378,89 @@ else:
 	sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, args=[Mvir_sim])
 	p0_walkers = emcee.utils.sample_ball(params, std, size=nwalkers)
 	sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
+
+
+#####-------------- Plot and Save --------------#####
+
+if not os.path.exists(save_path):
+# If the folder does not exist, create it and break the loop
+	os.makedirs(save_path)
+
+walkers = sampler.get_chain()
+
+chain = sampler.get_chain(flat=True)
+log_prob_samples = sampler.get_log_prob(flat=True)
+
+all_samples = np.concatenate((chain, log_prob_samples[:, None]), axis=1)
+
+fig, ax = plt.subplots(len(fit_par), 1, figsize=(10, 1.5*len(fit_par)))
+ax = ax.flatten()
+
+for i in range(len(fit_par)):
+	ax[i].plot(walkers[:, :, i])
+	ax[i].set_ylabel(f'${par_latex_names[i]}$')
+	ax[i].set_xlabel('Step #')
+
+plt.savefig(f'{save_path}/trace_plot_{niter}.pdf')
+
+#### Discard 0.9*steps and make triangle plot
+
+gd_samples = getdist.MCSamples(samples=sampler.get_chain(flat=True, discard=int(0.9*nsteps)), names=fit_par, labels=par_latex_names)
+
+np.save(f'{save_path}/all_walkers_{niter}.npy', walkers)
+np.savetxt(f'{save_path}/all_samples_{niter}.txt', all_samples)
+np.savetxt(f'{save_path}/sigma_intr_{niter}.txt',  np.column_stack((sigma_intr_rho, sigma_intr_Temp, sigma_intr_Pe)))
+np.savetxt(f'{save_path}/best_params_{niter}.txt', gd_samples.getMeans(), header=fit_par)
+########## Compare best-fit profiles ##########
+c = ['r', 'b', 'g', 'k']
+
+bins = [13.5, 14, 14.5, 15]
+# Fiducial HMCode profiles
+fitter.update_param(fit_par, gd_samples.getMeans())
+(Pe_bestfit, rho_bestfit, Temp_bestfit), r_bestfit = fitter.get_Pe_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0, return_rho=True, return_Temp=True)
+
+
+## Plot median Pe profiles
+fig, ax = plt.subplots(1, 3, figsize=(14, 4))
+
+rho_sim[rho_sim==0] = np.nan
+
+ax[0].errorbar(r_bins, np.log(np.nanmedian(rho_sim[mask], axis=0)), yerr=sigma_intr_rho, ls='-.', label='Magneticum (median)')
+ax[0].plot(r_bestfit, np.log(np.median(rho_bestfit[mask], axis=0).value), ls='-.', label='Best fit (median)')
+
+Temp_sim[Temp_sim==0] = np.nan
+ax[1].errorbar(r_bins, np.log(np.nanmedian(Temp_sim[mask], axis=0)), yerr=sigma_intr_Temp, ls='-.')
+ax[1].plot(r_bestfit, np.log(np.median(Temp_bestfit[mask], axis=0).value), ls='-.')
+
+
+Pe_sim[Pe_sim==0] = np.nan
+ax[2].errorbar(r_bins, np.log(np.nanmedian(Pe_sim[mask], axis=0)), yerr=sigma_intr_Pe, ls='-.')
+ax[2].plot(r_bestfit, np.log(np.median(Pe_bestfit[mask], axis=0).value), ls='-.')
+
+ax[0].set_xlim(0.1, 1.1)
+ax[1].set_xlim(0.1, 1.1)
+ax[2].set_xlim(0.1, 1.1)
+
+ax[0].set_xscale('log')
+ax[1].set_xscale('log')
+ax[2].set_xscale('log')
+
+ax[0].set_ylabel('$\ln \\rho_{gas}$ [GeV/cm$^3$]')
+ax[1].set_ylabel('$\ln$ Temperature [K]')
+ax[2].set_ylabel('$\ln P_e$ [keV/cm$^3$]')
+
+ax[0].set_xlabel('$r/Rvir$')
+ax[1].set_xlabel('$r/Rvir$')
+ax[2].set_xlabel('$r/Rvir$')
+
+ax[1].set_title(f'{mmin}<logM<{mmax}')
+ax[0].legend()
+plt.savefig(f'{save_path}/best_fit_profiles_{niter}.pdf', bbox_inches='tight')
+
+
+#### make triangle plot
+plt.figure()
+g = plots.get_subplot_plotter()
+g.triangle_plot(gd_samples, axis_marker_lw=2, marker_args={'lw':2}, line_args={'lw':1}, title_limit=2)
+plt.savefig(f'{save_path}/triangle_plot_{niter}.pdf')
+return sampler
