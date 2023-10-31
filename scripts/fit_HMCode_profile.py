@@ -73,7 +73,7 @@ def recompute_best_fit_scatter(params):
 	sigma_intr_rho = get_scatter(np.log(rho_rescale[mask]), np.log(median_rho))
 	sigma_intr_Temp = get_scatter(np.log(Temp_rescale[mask]), np.log(median_Temp))
 
-	return sigma_intr_Pe, sigma_intr_rho, sigma_intr_Temp, gd_samples.getMeans()
+	return sigma_intr_Pe, sigma_intr_rho, sigma_intr_Temp
 
 
 def likelihood(theory_prof, field):
@@ -298,7 +298,7 @@ nsteps = args.nsteps
 if niter>1:
 	print('Recomputing scatter using best fit parameters from previous iteration...')
 	best_params_prev_iter = np.loadtxt(f'{save_path}/best_params_{niter-1}.txt', skiprows=1)
-	sigma_intr_Pe, sigma_intr_rho, sigma_intr_Temp, params = recompute_best_fit_scatter(params)
+	sigma_intr_Pe, sigma_intr_rho, sigma_intr_Temp = recompute_best_fit_scatter(best_params_prev_iter)
 	starting_point = best_params_prev_iter
 
 
@@ -331,7 +331,7 @@ if test is False:
 			pool.wait()
 			sys.exit(0)
 		print('Testing interpolator...')
-		test_interpolator(p0_walkers)
+#		test_interpolator(p0_walkers)
 
 		sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, pool=pool, args=[Mvir_sim])
 		print('Intialized sampler...')
@@ -410,7 +410,7 @@ gd_samples = getdist.MCSamples(samples=sampler.get_chain(flat=True, discard=int(
 np.save(f'{save_path}/all_walkers_{niter}.npy', walkers)
 np.savetxt(f'{save_path}/all_samples_{niter}.txt', all_samples)
 np.savetxt(f'{save_path}/sigma_intr_{niter}.txt',  np.column_stack((sigma_intr_rho, sigma_intr_Temp, sigma_intr_Pe)))
-np.savetxt(f'{save_path}/best_params_{niter}.txt', gd_samples.getMeans(), header=fit_par)
+np.savetxt(f'{save_path}/best_params_{niter}.txt', gd_samples.getMeans(), header='\t'.join(fit_par))
 ########## Compare best-fit profiles ##########
 c = ['r', 'b', 'g', 'k']
 
@@ -463,4 +463,3 @@ plt.figure()
 g = plots.get_subplot_plotter()
 g.triangle_plot(gd_samples, axis_marker_lw=2, marker_args={'lw':2}, line_args={'lw':1}, title_limit=2)
 plt.savefig(f'{save_path}/triangle_plot_{niter}.pdf')
-return sampler
