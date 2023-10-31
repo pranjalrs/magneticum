@@ -105,18 +105,19 @@ def joint_likelihood(x, mass_list, z=0):
 	## Get profile for each halo
 	(Pe_theory, rho_theory, Temp_theory), r = fitter.get_Pe_profile_interpolated(mvir, r_bins=r_bins, z=z, return_rho=True, return_Temp=True)
 
-	loglike = 0
-
-	if 'Pe' in field  or 'all' in field:
-		loglike += likelihood(Pe_theory, 'Pe')
+	like_rho, like_Temp, like_Pe = 0., 0., 0.
 
 	if 'rho' in field or 'all' in field:
-		loglike += likelihood(rho_theory, 'rho')
+		like_rho = likelihood(rho_theory, 'rho')
 
 	if 'Temp' in field  or 'all' in field:
-		loglike += likelihood(Temp_theory, 'Temp')
+		like_Temp = likelihood(Temp_theory, 'Temp')
 
-	return loglike
+	if 'Pe' in field  or 'all' in field:
+		like_Pe = likelihood(Pe_theory, 'Pe')
+
+	loglike = like_rho + like_Temp + like_Pe
+	return loglike, like_rho, like_Temp, like_Pe
 
 bounds = {'f_H': [0.65, 0.85],
                 'gamma': [1.1, 5],
@@ -332,8 +333,8 @@ if test is False:
 			sys.exit(0)
 		print('Testing interpolator...')
 #		test_interpolator(p0_walkers)
-
-		sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, pool=pool, args=[Mvir_sim])
+		dtype = [('logl_rho', float), ('logl_Temp', float), ('logl_Pe', float)]
+		sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, blobs_dtype=dtype, pool=pool, args=[Mvir_sim])
 		print('Intialized sampler...')
 		sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
 
@@ -375,7 +376,8 @@ else:
 	print(f'Intrinsic rho scatter is {sigma_intr_rho}')
 	print(f'Intrinsic Temp scatter is {sigma_intr_Temp}')
 
-	sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, args=[Mvir_sim])
+	dtype = [('logl_rho', float), ('logl_Temp', float), ('logl_Pe', float)]
+	sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, blobs_dtype=dtype, args=[Mvir_sim])
 	p0_walkers = emcee.utils.sample_ball(params, std, size=nwalkers)
 	sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
 
@@ -387,12 +389,22 @@ if not os.path.exists(save_path):
 	os.makedirs(save_path)
 
 walkers = sampler.get_chain()
+log_prob = sampler.get_log_prob()
+blobs = sampler.get_blobs()
 
 chain = sampler.get_chain(flat=True)
-log_prob_samples = sampler.get_log_prob(flat=True)
+log_prob_flat = sampler.get_log_prob(flat=True)
+blobs_flat = sampler.get_blobs(flat=True)
 
-all_samples = np.concatenate((chain, log_prob_samples[:, None]), axis=1)
+idx = np.argmax(log_prob_flat[:, -1])
+best_params = chain[idx, :-1]
 
+all_samples = np.concatenate((chain, log_prob_flat[:, None], 
+							blobs_flat['logl_rho'][:, None], 
+							blobs_flat['logl_Temp'][:, None], 
+							blobs_flat['logl_Pe'][:, None]), axis=1)
+
+walkers = np.concatenate((walkers, log_prob, blobs['logl_rho'], blobs['logl_Temp'], blobs['logl_Pe']))
 fig, ax = plt.subplots(len(fit_par), 1, figsize=(10, 1.5*len(fit_par)))
 ax = ax.flatten()
 
@@ -410,7 +422,7 @@ gd_samples = getdist.MCSamples(samples=sampler.get_chain(flat=True, discard=int(
 np.save(f'{save_path}/all_walkers_{niter}.npy', walkers)
 np.savetxt(f'{save_path}/all_samples_{niter}.txt', all_samples)
 np.savetxt(f'{save_path}/sigma_intr_{niter}.txt',  np.column_stack((sigma_intr_rho, sigma_intr_Temp, sigma_intr_Pe)))
-np.savetxt(f'{save_path}/best_params_{niter}.txt', gd_samples.getMeans(), header='\t'.join(fit_par))
+np.savetxt(f'{save_path}/best_params_{niter}.txt', best_params, header='\t'.join(fit_par))
 ########## Compare best-fit profiles ##########
 c = ['r', 'b', 'g', 'k']
 
