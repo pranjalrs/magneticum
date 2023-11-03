@@ -28,23 +28,27 @@ class Profile():
 		self.eps2_0, self.eps2_1 = 0., 0.
 		self.HMcode_rescale_A = 1#1.2989607249999999
 
+		## Non-thermal pressure support
+		self.alpha_nt = 0.0
+		self.n_nt = 0.0
+
 		## For irho = 0
 		self.gamma = 1.177  # Polytropic index for bound gas profile
-		self.gamma_T = 2  # Slope for KS temperature profile
-		self.b = 0.0  # Slope for alpha = alpha * (M/M0)^b
-		self.c = 0.0  # Slope for gamma_T = gamma_T * (M/M0)^c
-		self.d = 0.0  # Slope for gamma = gamma * (M/M0)^d
+		self.gamma_T = 2  # Slope for KS temperature profile for low-mass halos
+#		self.b = 0.0  # Slope for alpha = alpha * (M/M0)^b
+#		self.d = 0.0  # Slope for gamma = gamma * (M/M0)^d
+
 		## For irho = 1
 		self.a = 0  # gamma= gamma*(M/M0)^a
 
 		## For irho = 2
-		self.gamma_0 = 0.5
-		self.gamma_1 = -0.05
-		self.gamma_2 = 0. # For redshift scaling, disabled
-		self.beta_0 = 4.7
-		self.beta_1 = 0.05
-		self.beta_2 = 0.  # For redshift scaling, disabled
-		self.eta = 1.3
+#		self.gamma_0 = 0.5
+#		self.gamma_1 = -0.05
+#		self.gamma_2 = 0. # For redshift scaling, disabled
+#		self.beta_0 = 4.7
+#		self.beta_1 = 0.05
+#		self.beta_2 = 0.  # For redshift scaling, disabled
+#		self.eta = 1.3
 
 		##### Check these parameters before producing profiles ####
 		## Choose Profile
@@ -297,8 +301,9 @@ class Profile():
 		rho_bnd = self.get_rho_bnd(M, r, r_virial=r_virial, c_M=c_M, z=z)
 		Temp_g = self.get_Temp_g(M, r, r_virial=r_virial, c_M=c_M, z=z)
 		P_e = rho_bnd * const.k_B*Temp_g/const.m_p/self.mu_e
+		factor_nt = self._get_factor_nonthermal(M, r, r_virial)
 
-		P_e = P_e.to(u.keV/u.cm**3, cu.with_H0(self.H0))
+		P_e = P_e.to(u.keV/u.cm**3, cu.with_H0(self.H0))*factor_nt
 
 		return_profiles = (P_e,)
 		if return_rho is True:
@@ -308,6 +313,10 @@ class Profile():
 			return_profiles += (Temp_g,)
 
 		return return_profiles
+
+	def _get_factor_nonthermal(self, M, r, r_virial):
+		Rnt = self.alpha_nt * (r/r_virial)**self.n_nt	
+		return np.maximum(0, 1-Rnt)
 
 
 	def get_rho_bnd(self, M, r, r_virial, c_M, z):
@@ -325,14 +334,16 @@ class Profile():
 		r_s = r_virial/c_M
 
 		params = Dict.empty(key_type=types.unicode_type, value_type=types.float64)
-		M0 = 1e14*u.Msun/cu.littleh
+		M0 = 1e13*u.Msun/cu.littleh
 
 		if self.irho == 0:
 			params['gamma'] = self.gamma
+
 			return self._get_rho_bnd((r/r_s).decompose(), M, params, irho=0)
 
 		if self.irho == 1:
-			params = {'gamma': self.gamma, 'a': self.a}
+			params['gamma'] = self.gamma
+			params['a'] = self.a
 
 			return self._get_rho_bnd((r/r_s).decompose(), M, params, irho=1)
 
@@ -381,8 +392,7 @@ class Profile():
 		'''
 		T_v = self._get_Temp_virial(M, r_virial, z=z)
 		r_s = r_virial/c_M
-		#x = (r/r_s).decompose()
-		x = (r/r_virial).decompose()
+		x = (r/r_s).decompose()
 
 		if self.irho == 0 or self.irho == 1:
 			f_r = np.log(1 + x)/x
@@ -390,17 +400,16 @@ class Profile():
 		elif self.irho == 2:
 			f_r = 1
 
-		M0 = 1e14*u.Msun/cu.littleh
-		gamma_T = self.gamma_T*(M/M0)**self.c
-		return T_v * (f_r)**(1/(gamma_T-1))
+		#gamma_T = self.gamma_T_1 + (self.gamma_T_2 - self.gamma_T_1) * self.get_f_bnd(M)/ (self.omega_b/self.omega_m)
+
+		return T_v * (f_r)**(1/(self.gamma_T-1))
 
 	def _get_Temp_virial(self, M, r_virial, z):
 		'''Eq. 39
 		Tv = G * m_p * mu_p /(a * rvirial) /(3/2 * kB) * M
 		'''
-		M0 = 1e14*u.Msun/cu.littleh
-		alpha = self.alpha*((M/M0).decompose())**self.b
-		return alpha*(const.G*const.m_p*self.mu_p*(1+z)/r_virial/(3/2*const.k_B)*M).to(u.K)
+
+		return self.alpha*(const.G*const.m_p*self.mu_p*(1+z)/r_virial/(3/2*const.k_B)*M).to(u.K)
 
 	def get_delta_v(self, z):
 		'''Eq. 22
