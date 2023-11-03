@@ -53,6 +53,11 @@ class Profile():
 		# 2 for mass scaling + modified scaling similar to Gupta 2015
 		self.irho = 0
 
+		## Choose mass-concentration relation
+		# 0 for Duffy 2008 (used in HMx)
+		# 1 for (Magneticum) Ragagnin 2021
+		self.imass_conc = 0
+
 		## Are you going to run MCMC?
 		## This enables an interpolator for the profile
 		self.use_interp = False  # set to True for computing profiles using interpolation
@@ -436,8 +441,15 @@ class Profile():
 		M should be in Msun/h
 		'''
 		## Concenetraion-Mass relation from Duffy et. al. 2008
-		MSCALE = 2e12*u.Msun/cu.littleh
-		c_M = 7.85 * (M/MSCALE)**(-0.081) * (1+z)**(-0.71)
+		if self.imass_conc == 0:
+			MSCALE = 2e12*u.Msun/cu.littleh
+			c_M = 7.85 * (M/MSCALE)**(-0.081) * (1+z)**(-0.71)
+
+		if self.imass_conc == 1:
+			# Table 2 in arXiv:2011.05345
+			MSCALE = 19.9e13*0.704*u.Msun/cu.littleh
+			zp = 1/(1 + 0.877)
+			c_M = 1.5* (M/MSCALE)**(-0.04) * ((1+z)/(1+zp))**(-0.52)
 
 		eps1 = self.eps1_0 + self.eps1_1*z
 		eps2 = self.eps2_0 + self.eps2_1*z
