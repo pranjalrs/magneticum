@@ -399,13 +399,8 @@ class Profile():
 		r_s = r_virial/c_M
 		x = (r/r_s).decompose()
 
-		if self.irho == 0 or self.irho == 1:
-			f_r = np.log(1 + x)/x
+		f_r = np.log(1 + x)/x
 
-		elif self.irho == 2:
-			f_r = 1
-
-		#gamma_T = self.gamma_T_1 + (self.gamma_T_2 - self.gamma_T_1) * self.get_f_bnd(M)/ (self.omega_b/self.omega_m)
 
 		return T_v * (f_r)**(1/(self.gamma_T-1))
 
