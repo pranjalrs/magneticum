@@ -150,43 +150,55 @@ class Profile():
 				self.__setattr__(names[i], values[i])
 		self._update_derived_param()
 
-	def get_rho_dm_profile(self, M, z, r_bins):
-		rvir = self.get_rvirial(M, z)
+
+	def get_rho_dm_profile_interpolated(self, M, z, r_bins=None):
+		if '_rho_dm_prof_interpolator' not in self.__dict__:
+			raise Exception('Attempting to use interpolator without initiliazing! \n Please set `use_interp` to True')
+
+		if r_bins is None:
+			r_bins = np.logspace(np.log10(0.1), np.log10(1), 200)
+
+		this_z_rho_dm_interp = self._rho_dm_prof_interpolator[z]
+		m_min, m_max = this_z_rho_dm_interp.get_knots()[0].min(), this_z_rho_dm_interp.get_knots()[0].max()
+		r_min, r_max = this_z_rho_dm_interp.get_knots()[1].min(), this_z_rho_dm_interp.get_knots()[1].max()
+
+
+		M = M.to(u.Msun/cu.littleh)
+
+		if np.any((M.value < m_min) | (M.value > m_max)):
+			idx = np.where((M.value < m_min) | (M.value > m_max))[0][0]
+			raise Exception(f'''Mass {np.log10(M.value[idx]):.2f} Msun/h is outside the interpolation 
+			range of {np.log10(m_min):.2f} - {np.log10(m_max):.2f} Msun/h!''')
+		
+		if np.any((r_bins < r_min) | (r_bins > r_max)):
+			idx = np.where((r_bins < r_min) | (r_bins > r_max))[0][0]
+			raise Exception(f'Radius {r_bins[idx]} outside interpolation range of {r_min} - {r_max} R/Rvir!')
+
+		this_rho_dm_profile = this_z_rho_dm_interp(M, r_bins)
+		this_rho_dm_profile *= self._rho_dm_prof_interpolator_units
+
+		return_profiles = (this_rho_dm_profile,)
+
+		return return_profiles, r_bins
+
+	def get_rho_dm_profile(self, M, z, r_bins=None):
+		if r_bins is None:
+			r_bins = np.logspace(np.log10(0.1), np.log10(1), 200)
+
+		r_virial = self.get_rvirial(M, z)
 		c_M = self.get_concentration(M, z)
 		rs = r_virial/c_M
 
 		fcdm = 1 - self.omega_b/self.omega_m
 		Mcdm = M*fcdm
 
-		rho_cdm = 1/((r_bins/rs)(1 + r/rs)**2)
+		r = r_bins*r_virial
+		rho_cdm = 1/((r/rs)*(1 + r/rs)**2)  # NFW profile
+
 		norm = 4*np.pi*rs**3 * (np.log(1 + c_M) - c_M/(1+c_M))
 
-		return (rho_cdm*Mcdm/norm).to(u.g/u.cm**3, cu.with_H0(self.H0)).to(u.GeV/u.cm**3, u.mass_energy())
-
-
-	def get_Pe_profile(self, M, z=0, r_bins=None, return_rho=False, return_Temp=False):
-		"""Computes pressure profile for a given mass from 0.1-1Rvir
-
-		Parameters
-		----------
-		M : float
-			Virial Mass (in Msun/h)
-		z : float, optional
-			Redshift, by default 0
-		Returns
-		-------
-		_type_
-			r as a fraction of virial radius
-		"""
-
-		if r_bins is None:
-			r_bins = np.logspace(np.log10(0.1), np.log10(1), 200)
-
-		rvir = self.get_rvirial(M, z)
-
-		this_profile = self.get_Pe(M, r_bins*rvir, z=z, return_rho=return_rho, return_Temp=return_Temp)
-		
-		return this_profile, r_bins
+		rho_cdm = rho_cdm*Mcdm/norm
+		return (rho_cdm).to(u.g/u.cm**3, cu.with_H0(self.H0)).to(u.GeV/u.cm**3, u.mass_energy()), r_bins
 
 
 	def get_Pe_profile_interpolated(self, M, z=0, r_bins=None, return_rho=False, return_Temp=False):
@@ -206,18 +218,9 @@ class Profile():
 		-------
 		_type_
 			_description_
-
-		Raises
-		------
-		Exception
-			_description_
-		Exception
-			_description_
-		Exception
-			_description_
 		"""
 		if '_Pe_prof_interpolator' not in self.__dict__:
-			raise Exception('Attempting to use interpolator without initiliazing! \n Please set ifit to True')
+			raise Exception('Attempting to use interpolator without initiliazing! \n Please set `use_interp` to True')
 
 		if r_bins is None:
 			r_bins = np.logspace(np.log10(0.1), np.log10(1), 200)
@@ -258,37 +261,30 @@ class Profile():
 		return return_profiles, r_bins
 
 
-	def get_Pe_profile_interpolated2(self, M, z=0, r_bins=None):
-		if '_Pe_prof_interpolator' not in self.__dict__:
-			raise Exception('Attempting to use interpolator without initiliazing! \n Please set ifit to True')
+	def get_Pe_profile(self, M, z=0, r_bins=None, return_rho=False, return_Temp=False):
+		"""Computes pressure profile for a given mass from 0.1-1Rvir
+
+		Parameters
+		----------
+		M : float
+			Virial Mass (in Msun/h)
+		z : float, optional
+			Redshift, by default 0
+		Returns
+		-------
+		_type_
+			r as a fraction of virial radius
+		"""
 
 		if r_bins is None:
 			r_bins = np.logspace(np.log10(0.1), np.log10(1), 200)
 
-		this_z_Pe_interp = self._Pe_prof_interpolator[z]
-		m_min, m_max = this_z_Pe_interp.get_knots()[0].min(), this_z_Pe_interp.get_knots()[0].max()
-		r_min, r_max = this_z_Pe_interp.get_knots()[1].min(), this_z_Pe_interp.get_knots()[1].max()
+		r_virial = self.get_rvirial(M, z)
 
-
-		M = M.to(u.Msun/cu.littleh)
-
-		if np.any((M.value < m_min) | (M.value > m_max)):
-			idx = np.where((M.value < m_min) | (M.value > m_max))[0][0]
-			raise Exception(f'''Mass {np.log10(M.value[idx]):.2f} Msun/h is outside the interpolation 
-			range of {np.log10(m_min):.2f} - {np.log10(m_max):.2f} Msun/h!''')
+		this_profile = self.get_Pe(M, r_bins*r_virial, z=z, return_rho=return_rho, return_Temp=return_Temp)
 		
-		if np.any((r_bins < r_min) | (r_bins > r_max)):
-			idx = np.where((r_bins < r_min) | (r_bins > r_max))[0][0]
-			raise Exception(f'Radius outside interpolation range of {r_min} - {r_max} R/Rvir!')
+		return this_profile, r_bins
 
-		try:
-			this_Pe_profile = this_z_Pe_interp(M, r_bins)
-			this_Pe_profile *= self._Pe_prof_interpolator_units
-
-		except:
-			pass 
-
-		return this_Pe_profile, r_bins
 
 	def get_Pe(self, M, r, z, return_rho=False, return_Temp=False):
 		"""Returns the electron pressure based on eq. 40
@@ -496,6 +492,7 @@ class Profile():
 			self._init_prof_interpolator()
 
 	def _init_prof_interpolator(self):
+		self._rho_dm_prof_interpolator = {}
 		self._Pe_prof_interpolator = {}
 		self._rho_prof_interpolator = {}
 		self._Temp_prof_interpolator = {}
@@ -504,20 +501,26 @@ class Profile():
 		Mvirs = np.logspace(np.log10(self.mmin), np.log10(self.mmax), 50)*u.Msun/cu.littleh
 
 		for z in self.zs:
+			rho_dm_profs = []
 			Pe_profs = []
 			rho_profs = []
 			Temp_profs = []
 			for j, m in enumerate(Mvirs):
+				this_rho_dm_prof, _ = self.get_rho_dm_profile(m, z, r_bins)
+				rho_dm_profs.append(this_rho_dm_prof)
+
 				temp, _ = self.get_Pe_profile(m, z, r_bins=r_bins, return_rho=True, return_Temp=True)
 				this_Pe_prof, this_rho_prof, this_Temp_prof = temp[0], temp[1], temp[2]
 				Pe_profs.append(this_Pe_prof.value)
 				rho_profs.append(this_rho_prof.value)
 				Temp_profs.append(this_Temp_prof)
 
+			self._rho_dm_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, rho_dm_profs)
 			self._Pe_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, Pe_profs)
 			self._rho_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, rho_profs)
 			self._Temp_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, Temp_profs)
 		
+		self._rho_dm_prof_interpolator_units = this_rho_dm_prof.unit
 		self._Pe_prof_interpolator_units = this_Pe_prof.unit
 		self._rho_prof_interpolator_units = this_rho_prof.unit
 		self._Temp_prof_interpolator_units = this_Temp_prof.unit
@@ -534,28 +537,38 @@ class Profile():
 		# Now test at each redshift
 		for z in self.zs:
 			Ms = 10**np.random.uniform(np.log10(self.mmin), np.log10(self.mmax), n)*u.Msun/cu.littleh
+			rho_dm_difference = 0.0
 			Pe_difference, rho_difference, Temp_difference = 0., 0., 0.
 			for j, m in enumerate(Ms):
+				true_rho_dm_prof, _ = self.get_rho_dm_profile(m, z)
+
 				true_profs,_ = self.get_Pe_profile(m, z, return_rho=True, return_Temp=True)
 				true_Pe_prof, true_rho_prof, true_Temp_prof = true_profs[0].value, true_profs[1].value, true_profs[2].value
 
+				interp_rho_dm_prof = np.concatenate(self._rho_dm_prof_interpolator[z](m, r_bins))
 				interp_Pe_prof = np.concatenate(self._Pe_prof_interpolator[z](m, r_bins))
 				interp_rho_prof = np.concatenate(self._rho_prof_interpolator[z](m, r_bins))
 				interp_Temp_prof = np.concatenate(self._Temp_prof_interpolator[z](m, r_bins))
  
+				this_rho_dm_diff = np.sum(np.abs(interp_rho_dm_prof/true_rho_dm_prof - 1))
 				this_Pe_diff = np.sum(np.abs(interp_Pe_prof/true_Pe_prof - 1))
 				this_rho_diff = np.sum(np.abs(interp_rho_prof/true_rho_prof - 1))
 				this_Temp_diff = np.sum(np.abs(interp_Temp_prof/true_Temp_prof - 1))
 
+				rho_dm_difference += this_Pe_diff
 				Pe_difference += this_Pe_diff
 				rho_difference += this_rho_diff
 				Temp_difference += this_Temp_diff
 
+			mean_rho_dm_difference = rho_dm_difference/n*100
 			mean_Pe_difference = Pe_difference/n*100
 			mean_rho_difference = rho_difference/n*100
 			mean_Temp_difference = Temp_difference/n*100
 
 			# Raise exception if frac. diff > 0.001 %
+			if mean_rho_dm_difference > self.interp_error_tol:
+				raise Exception(f'Interpolation test failed for dark matter rho profile with a mean frac. difference of {mean_rho_dm_difference:.4f}%. :(')
+
 			if mean_Pe_difference > self.interp_error_tol:
 				raise Exception(f'Interpolation test failed for Pe profile with a mean frac. difference of {mean_Pe_difference:.4f}%. :(')
 
@@ -566,6 +579,9 @@ class Profile():
 				raise Exception(f'Interpolation test failed for Temperature profile with a mean frac. difference of {mean_Temp_difference:.4f}%. :(')
 
 			if self.verbose is True:
+				print(f'Mean frac. difference between interpolated and true dark matter rho profile...')
+				print(f'At z={z} is {mean_rho_dm_difference:.4f} %')
+
 				print(f'Mean frac. difference between interpolated and true Pe profile...')
 				print(f'At z={z} is {mean_Pe_difference:.4f} %')
 				
