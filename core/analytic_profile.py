@@ -150,6 +150,19 @@ class Profile():
 				self.__setattr__(names[i], values[i])
 		self._update_derived_param()
 
+	def get_rho_dm_profile(self, M, z, r_bins):
+		rvir = self.get_rvirial(M, z)
+		c_M = self.get_concentration(M, z)
+		rs = r_virial/c_M
+
+		fcdm = 1 - self.omega_b/self.omega_m
+		Mcdm = M*fcdm
+
+		rho_cdm = 1/((r_bins/rs)(1 + r/rs)**2)
+		norm = 4*np.pi*rs**3 * (np.log(1 + c_M) - c_M/(1+c_M))
+
+		return (rho_cdm*Mcdm/norm).to(u.g/u.cm**3, cu.with_H0(self.H0)).to(u.GeV/u.cm**3, u.mass_energy())
+
 
 	def get_Pe_profile(self, M, z=0, r_bins=None, return_rho=False, return_Temp=False):
 		"""Computes pressure profile for a given mass from 0.1-1Rvir
@@ -481,22 +494,6 @@ class Profile():
 		if self.use_interp is True:
 			# self._init_norm_interp()
 			self._init_prof_interpolator()
-
-	# def _init_norm_interp(self):
-	#     Mvirs = np.logspace(10, 16, 100)*u.Msun/cu.littleh
-	#     self._norm_interpolate = {}
-
-	#     norms = np.zeros((len(self.zs), len(Mvirs)))
-	#     for i in range(len(self.zs)):
-	#         norms = []
-	#         for j, m in enumerate(Mvirs):
-	#             rvir = self.get_rvirial(m, z=self.zs[i])
-	#             c_M = self.get_concentration(m, z=self.zs[i])
-	#             this_norm = self.get_norm(self._get_rho_bnd_wrapper, m, rvir, c_M=c_M)
-	#             norms.append(this_norm.value)
-
-	#         self._norm_interpolate[self.zs[i]] = scipy.interpolate.CubicSpline(Mvirs, norms, extrapolate=False)
-	#     self._norm_interpolate_units = this_norm.unit
 
 	def _init_prof_interpolator(self):
 		self._Pe_prof_interpolator = {}
