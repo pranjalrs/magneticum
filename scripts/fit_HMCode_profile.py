@@ -250,7 +250,7 @@ Mvir_sim = np.array(Mvir_sim, dtype='float32')
 sorting_indices = np.argsort(Mvir_sim)
 
 mask = (Mvir_sim>=10**(mmin)) & (Mvir_sim<10**mmax)
-idx = np.arange(5, 10)
+idx = np.arange(10)
 r_bins = r_bins[idx]
 
 
@@ -311,11 +311,11 @@ print('Initialized profile fitter ...')
 #fit_par = ['gamma', 'alpha', 'log10_M0', 'eps1_0', 'eps2_0', 'gamma_T_1', 'gamma_T_2', 'alpha_nt', 'n_nt']
 #par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}^1', '\Gamma_\mathrm{T}^2', '\\alpha_{nt}', 'n_{nt}']
 
-#fit_par = ['gamma', 'alpha', 'log10_M0', 'eps1_0', 'eps2_0', 'gamma_T']#, 'a']
-#par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}']#, 'a']
+fit_par = ['gamma', 'alpha', 'log10_M0', 'eps1_0', 'eps2_0', 'gamma_T']#, 'a']
+par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}']#, 'a']
 
-fit_par = ['gamma', 'log10_M0', 'eps1_0', 'eps2_0']
-par_latex_names = ['\Gamma', '\log_{10}M_0', '\epsilon_1', '\epsilon_2']
+#fit_par = ['gamma', 'log10_M0', 'eps1_0', 'eps2_0']
+#par_latex_names = ['\Gamma', '\log_{10}M_0', '\epsilon_1', '\epsilon_2']
 
 starting_point = [fid_val[k] for k in fit_par]
 std = [std_dev[k] for k in fit_par]
@@ -419,7 +419,7 @@ c = ['r', 'b', 'g', 'k']
 
 # Fiducial HMCode profiles
 fitter.update_param(fit_par, best_params)
-rho_dm_bestfit = fitter.get_rho_dm_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0)
+rho_dm_bestfit, r = fitter.get_rho_dm_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0)
 (Pe_bestfit, rho_bestfit, Temp_bestfit), r_bestfit = fitter.get_Pe_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0, return_rho=True, return_Temp=True)
 
 
@@ -428,8 +428,8 @@ fig, ax = plt.subplots(2, 2, figsize=(10, 8))
 ax = ax.flatten()
 
 rho_dm_sim[rho_dm_sim==0] = np.nan
-ax[0].errorbar(r_bins, np.log(np.nanmedian(rho_sim[mask], axis=0)), yerr=sigma_intr_rho, ls='-.', label='Magneticum (median)')
-ax[0].plot(r_bestfit, np.log(np.median(rho_bestfit[mask], axis=0).value), ls='-.', label='Best fit (median)')
+ax[0].errorbar(r_bins, np.log(np.nanmedian(rho_dm_sim[mask], axis=0)), yerr=sigma_intr_rho_dm, ls='-.', label='Magneticum (median)')
+ax[0].plot(r_bestfit, np.log(np.median(rho_dm_bestfit[mask], axis=0).value), ls='-.', label='Best fit (median)')
 
 rho_sim[rho_sim==0] = np.nan
 

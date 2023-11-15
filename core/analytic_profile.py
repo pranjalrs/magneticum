@@ -181,7 +181,7 @@ class Profile():
 		this_rho_dm_profile = this_z_rho_dm_interp(M, r_bins)
 		this_rho_dm_profile *= self._rho_dm_prof_interpolator_units
 
-		return_profiles = (this_rho_dm_profile,)
+		return_profiles = this_rho_dm_profile
 
 		return return_profiles, r_bins
 
@@ -511,13 +511,13 @@ class Profile():
 			Temp_profs = []
 			for j, m in enumerate(Mvirs):
 				this_rho_dm_prof, _ = self.get_rho_dm_profile(m, z, r_bins)
-				rho_dm_profs.append(this_rho_dm_prof)
+				rho_dm_profs.append(this_rho_dm_prof.value)
 
 				temp, _ = self.get_Pe_profile(m, z, r_bins=r_bins, return_rho=True, return_Temp=True)
 				this_Pe_prof, this_rho_prof, this_Temp_prof = temp[0], temp[1], temp[2]
 				Pe_profs.append(this_Pe_prof.value)
 				rho_profs.append(this_rho_prof.value)
-				Temp_profs.append(this_Temp_prof)
+				Temp_profs.append(this_Temp_prof.value)
 
 			self._rho_dm_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, rho_dm_profs)
 			self._Pe_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, Pe_profs)
@@ -545,6 +545,7 @@ class Profile():
 			Pe_difference, rho_difference, Temp_difference = 0., 0., 0.
 			for j, m in enumerate(Ms):
 				true_rho_dm_prof, _ = self.get_rho_dm_profile(m, z)
+				true_rho_dm_prof = tru_rho_dm_prof.value
 
 				true_profs,_ = self.get_Pe_profile(m, z, return_rho=True, return_Temp=True)
 				true_Pe_prof, true_rho_prof, true_Temp_prof = true_profs[0].value, true_profs[1].value, true_profs[2].value
