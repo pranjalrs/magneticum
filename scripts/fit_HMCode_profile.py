@@ -206,9 +206,13 @@ for f in files:
 
 	for halo in this_prof_data:
 
-		## Pressure	
+		## rho dm
 		rho_dm_prof_interp, rho_dm_rescale_interp, unc_rho_dm = get_halo_data(halo, 'rho_dm', r_bins, return_sigma=True)
 		if rho_dm_prof_interp is None or rho_dm_rescale_interp is None: continue
+
+		## Pressure	
+		Pe_prof_interp, Pe_rescale_interp, unc_Pe = get_halo_data(halo, 'Pe', r_bins, return_sigma=True)
+		if Pe_prof_interp is None or Pe_rescale_interp is None: continue
 
 		## Gas density
 		rho_prof_interp, rho_rescale_interp, unc_rho = get_halo_data(halo, 'rho', r_bins, return_sigma=True)
