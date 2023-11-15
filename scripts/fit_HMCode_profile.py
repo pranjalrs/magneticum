@@ -412,7 +412,7 @@ gd_samples = getdist.MCSamples(samples=sampler.get_chain(flat=True, discard=int(
 
 np.save(f'{save_path}/all_walkers_{niter}.npy', walkers)
 np.savetxt(f'{save_path}/all_samples_{niter}.txt', all_samples)
-np.savetxt(f'{save_path}/sigma_intr_{niter}.txt',  np.column_stack((sigma_intr_rho, sigma_intr_Temp, sigma_intr_Pe)))
+np.savetxt(f'{save_path}/sigma_intr_{niter}.txt',  np.column_stack((sigma_intr_rho_dm, sigma_intr_rho, sigma_intr_Temp, sigma_intr_Pe)))
 np.savetxt(f'{save_path}/best_params_{niter}.txt', best_params, header='\t'.join(fit_par))
 ########## Compare best-fit profiles ##########
 c = ['r', 'b', 'g', 'k']
