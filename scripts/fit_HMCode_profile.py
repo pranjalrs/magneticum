@@ -103,13 +103,13 @@ def joint_likelihood(x, mass_list, z=0):
 
 	mvir = mass_list*u.Msun/cu.littleh
 	## Get profile for each halo
-	cdm_theory, r = fitter.get_cdm_profile_interpolated(mvir, r_bins=r_bins, z=z)
+	rho_dm_theory, r = fitter.get_rho_dm_profile_interpolated(mvir, r_bins=r_bins, z=z)
 	(Pe_theory, rho_theory, Temp_theory), r = fitter.get_Pe_profile_interpolated(mvir, r_bins=r_bins, z=z, return_rho=True, return_Temp=True)
 
-	like_cdm, like_rho, like_Temp, like_Pe = 0., 0., 0., 0.
+	like_rho_dm, like_rho, like_Temp, like_Pe = 0., 0., 0., 0.
 
-	if 'cdm' in field:
-		like_cdm = likelihood(cdm_theory, 'cdm')
+	if 'rho_dm' in field:
+		like_rho_dm = likelihood(rho_dm_theory, 'rho_dm')
 
 	if 'rho' in field or 'all' in field:
 		like_rho = likelihood(rho_theory, 'rho')
@@ -120,8 +120,8 @@ def joint_likelihood(x, mass_list, z=0):
 	if 'Pe' in field  or 'all' in field:
 		like_Pe = likelihood(Pe_theory, 'Pe')
 
-	loglike = like_cdm + like_rho + like_Temp + like_Pe
-	return loglike, like_cdm, like_rho, like_Temp, like_Pe
+	loglike = like_rho_dm + like_rho + like_Temp + like_Pe
+	return loglike, like_rho_dm, like_rho, like_Temp, like_Pe
 
 bounds = {'f_H': [0.65, 0.85],
                 'gamma': [1.1, 5],
@@ -177,12 +177,12 @@ files += glob.glob(f'{data_path}/Box2/Pe_Pe_Mead_Temp_matter_cdm_gas_v_disp_z=0.
 
 ## We will interpolate all measured profiles to the same r_bins as 
 ## the analytical profile for computational efficiency
-cdm_sim= []
+rho_dm_sim= []
 Pe_sim= []
 rho_sim= []
 Temp_sim= []
 
-sigma_lncdm = []
+sigma_lnrho_dm = []
 sigma_lnPe = []
 sigma_lnrho = []
 sigma_lnTemp = []
@@ -190,7 +190,7 @@ sigma_lnTemp = []
 Mvir_sim = []
 
 ## Also need to rescale profile to guess intrinsic scatter 
-cdm_rescale = []
+rho_dm_rescale = []
 Pe_rescale = []
 rho_rescale = []
 Temp_rescale = []
@@ -207,8 +207,8 @@ for f in files:
 	for halo in this_prof_data:
 
 		## Pressure	
-		cdm_prof_interp, cdm_rescale_interp, unc_cdm = get_halo_data(halo, 'cdm', r_bins, return_sigma=True)
-		if cdm_prof_interp is None or cdm_rescale_interp is None: continue
+		rho_dm_prof_interp, rho_dm_rescale_interp, unc_rho_dm = get_halo_data(halo, 'rho_dm', r_bins, return_sigma=True)
+		if rho_dm_prof_interp is None or rho_dm_rescale_interp is None: continue
 
 		## Gas density
 		rho_prof_interp, rho_rescale_interp, unc_rho = get_halo_data(halo, 'rho', r_bins, return_sigma=True)
@@ -220,9 +220,9 @@ for f in files:
 		if Temp_prof_interp is None or Temp_rescale_interp is None: continue
 
 		# These should be after all the if statements
-		cdm_sim.append(cdm_prof_interp)
-		cdm_rescale.append(cdm_rescale_interp)
-		sigma_lncdm.append(unc_cdm)
+		rho_dm_sim.append(rho_dm_prof_interp)
+		rho_dm_rescale.append(rho_dm_rescale_interp)
+		sigma_lnrho_dm.append(unc_rho_dm)
 
 		Pe_sim.append(Pe_prof_interp)
 		Pe_rescale.append(Pe_rescale_interp)
@@ -251,19 +251,19 @@ r_bins = r_bins[idx]
 
 
 
-cdm_sim = np.array(cdm_sim, dtype='float32')[sorting_indices][:, idx]
+rho_dm_sim = np.array(rho_dm_sim, dtype='float32')[sorting_indices][:, idx]
 Pe_sim = np.array(Pe_sim, dtype='float32')[sorting_indices][:, idx]
 rho_sim = np.array(rho_sim, dtype='float32')[sorting_indices][:, idx]
 Temp_sim = np.array(Temp_sim, dtype='float32')[sorting_indices][:, idx]
 Mvir_sim = Mvir_sim[sorting_indices]
 
-#---------------------- cdm ----------------------#
-cdm_rescale = np.vstack(cdm_rescale)[sorting_indices][:, idx]
-sigma_lncdm = np.vstack(sigma_lncdm)[sorting_indices][:, idx]
+#---------------------- rho_dm ----------------------#
+rho_dm_rescale = np.vstack(rho_dm_rescale)[sorting_indices][:, idx]
+sigma_lnrho_dm = np.vstack(sigma_lnrho_dm)[sorting_indices][:, idx]
 
 # High mass
-median_prof = np.median(cdm_rescale[mask], axis=0)
-sigma_intr_cdm = get_scatter(np.log(cdm_rescale[mask]), np.log(median_prof))
+median_prof = np.median(rho_dm_rescale[mask], axis=0)
+sigma_intr_rho_dm = get_scatter(np.log(rho_dm_rescale[mask]), np.log(median_prof))
 
 #---------------------- Pressure ----------------------#
 Pe_rescale = np.vstack(Pe_rescale)[sorting_indices][:, idx]
@@ -292,7 +292,7 @@ median_prof = np.median(Temp_rescale[mask], axis=0)
 sigma_intr_Temp = get_scatter(np.log(Temp_rescale[mask]), np.log(median_prof))
 
 
-sigma_intr_cdm[-1] = 0.1
+sigma_intr_rho_dm[-1] = 0.1
 sigma_intr_Pe[-1] = 0.1
 sigma_intr_rho[-1] = 0.1
 sigma_intr_Temp[-1] = 0.1
@@ -348,7 +348,7 @@ def test_interpolator(walkers):
 		test_interp._test_prof_interpolator()
 
 #####-------------- RUN MCMC --------------#####
-blobs_dtype = [('loglike_cdm', float), ('loglike_rho', float), ('loglike_Temp', float), ('loglike_Pe', float)]
+blobs_dtype = [('loglike_rho_dm', float), ('loglike_rho', float), ('loglike_Temp', float), ('loglike_Pe', float)]
 
 if test is False:
 	with MPIPool() as pool:
@@ -386,7 +386,7 @@ blobs_flat = sampler.get_blobs(flat=True)
 idx = np.argmax(log_prob_flat)
 best_params = chain[idx]
 
-all_samples = np.concatenate((chain, log_prob_flat[:, None], blobs_flat['loglike_cdm'][:, None], 
+all_samples = np.concatenate((chain, log_prob_flat[:, None], blobs_flat['loglike_rho_dm'][:, None], 
 							blobs_flat['loglike_rho'][:, None], 
 							blobs_flat['loglike_Temp'][:, None], 
 							blobs_flat['loglike_Pe'][:, None]), axis=1)
