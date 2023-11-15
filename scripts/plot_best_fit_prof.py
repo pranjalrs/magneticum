@@ -78,22 +78,20 @@ files += glob.glob(f'{data_path}/Box2/Pe_Pe_Mead_Temp_matter_cdm_gas_v_disp_z=0.
 
 ## We will interpolate all measured profiles to the same r_bins as 
 ## the analytical profile for computational efficiency
+rho_dm_sim= []
 Pe_sim= []
 rho_sim= []
 Temp_sim= []
 
-# r_sim = []
-sigmaP_sim = []
-sigmarho_sim = []
-sigmaTemp_sim = []
-
-sigmalnP_sim = []
-sigmalnrho_sim = []
-sigmalnTemp_sim = []
+sigma_lnrho_dm = []
+sigma_lnPe = []
+sigma_lnrho = []
+sigma_lnTemp = []
 
 Mvir_sim = []
 
 ## Also need to rescale profile to guess intrinsic scatter 
+rho_dm_rescale = []
 Pe_rescale = []
 rho_rescale = []
 Temp_rescale = []
@@ -103,59 +101,80 @@ r_bins = (bin_edges[:-1] + bin_edges[1:])/2
 r_bins = r_bins[3:-3]  #Exclude the last bin ~0.2-1.04 Rvir
 r_bins[-1] = 0.98 # Make last bin slightly smaller than Rvir
 
+
 for f in files:
 	this_prof_data = joblib.load(f)
 
 	for halo in this_prof_data:
 
+		## rho dm
+		rho_dm_prof_interp, rho_dm_rescale_interp, unc_rho_dm = get_halo_data(halo, 'rho_dm', r_bins, return_sigma=True)
+		if rho_dm_prof_interp is None or rho_dm_rescale_interp is None: continue
+
 		## Pressure	
-		Pe_prof_interp, Pe_rescale_interp = get_halo_data(halo, 'Pe', r_bins)
+		Pe_prof_interp, Pe_rescale_interp, unc_Pe = get_halo_data(halo, 'Pe', r_bins, return_sigma=True)
 		if Pe_prof_interp is None or Pe_rescale_interp is None: continue
 
 		## Gas density
-		rho_prof_interp, rho_rescale_interp = get_halo_data(halo, 'rho', r_bins)
+		rho_prof_interp, rho_rescale_interp, unc_rho = get_halo_data(halo, 'rho', r_bins, return_sigma=True)
 		if rho_prof_interp is None or rho_rescale_interp is None: continue
 
 
 		## Temperature
-		Temp_prof_interp, Temp_rescale_interp = get_halo_data(halo, 'Temp', r_bins)
+		Temp_prof_interp, Temp_rescale_interp, unc_Temp  = get_halo_data(halo, 'Temp', r_bins, return_sigma=True)
 		if Temp_prof_interp is None or Temp_rescale_interp is None: continue
 
 		# These should be after all the if statements
-		rho_sim.append(rho_prof_interp)
-		rho_rescale.append(rho_rescale_interp)
+		rho_dm_sim.append(rho_dm_prof_interp)
+		rho_dm_rescale.append(rho_dm_rescale_interp)
+		sigma_lnrho_dm.append(unc_rho_dm)
 
 		Pe_sim.append(Pe_prof_interp)
 		Pe_rescale.append(Pe_rescale_interp)
+		sigma_lnPe.append(unc_Pe)
+
+		rho_sim.append(rho_prof_interp)
+		rho_rescale.append(rho_rescale_interp)
+		sigma_lnrho.append(unc_rho)
 
 		Temp_sim.append(Temp_prof_interp)
 		Temp_rescale.append(Temp_rescale_interp)    
+		sigma_lnTemp.append(unc_Temp)
 
 		Mvir_sim.append(halo['mvir'])
+
+# Since low mass halos have a large scatter we compute it separately for them
 
 # Now we need to sort halos in order of increasing mass
 # Since this is what the scipy interpolator expects
 Mvir_sim = np.array(Mvir_sim, dtype='float32')
 sorting_indices = np.argsort(Mvir_sim)
+
 mask = (Mvir_sim>=10**(mmin)) & (Mvir_sim<10**mmax)
-idx = np.arange(5, 10)
+idx = np.arange(10)
 r_bins = r_bins[idx]
 
+
+
+rho_dm_sim = np.array(rho_dm_sim, dtype='float32')[sorting_indices][:, idx]
 Pe_sim = np.array(Pe_sim, dtype='float32')[sorting_indices][:, idx]
 rho_sim = np.array(rho_sim, dtype='float32')[sorting_indices][:, idx]
 Temp_sim = np.array(Temp_sim, dtype='float32')[sorting_indices][:, idx]
 Mvir_sim = Mvir_sim[sorting_indices]
-####################### Pressure ###############################
+
+#---------------------- rho_dm ----------------------#
+rho_dm_rescale = np.vstack(rho_dm_rescale)[sorting_indices][:, idx]
+sigma_lnrho_dm = np.vstack(sigma_lnrho_dm)[sorting_indices][:, idx]
+#---------------------- Pressure ----------------------#
 Pe_rescale = np.vstack(Pe_rescale)[sorting_indices][:, idx]
 sigma_lnPe = np.vstack(sigma_lnPe)[sorting_indices][:, idx]
 ####################### rho ###############################
 rho_rescale = np.vstack(rho_rescale)[sorting_indices][:, idx]
 sigma_lnrho = np.vstack(sigma_lnrho)[sorting_indices][:, idx]
+
 ####################### Temp ###############################
 Temp_rescale = np.vstack(Temp_rescale)[sorting_indices][:, idx]
 sigma_lnTemp = np.vstack(sigma_lnTemp)[sorting_indices][:, idx]
-
-
 
 print('Finished processing simulation data...')
 
@@ -178,7 +197,7 @@ flat_chain = np.loadtxt(f'{save_path}/all_samples_{niter}.txt')
 sigma_int = np.loadtxt(f'{save_path}/sigma_intr_{niter}.txt')
 sigma_intr_rho, sigma_intr_Temp, sigma_intr_Pe = sigma_int[:, 0], sigma_int[:, 1], sigma_int[:, 2]
 
-loglike_walkers = flat_chain[:, -4].reshape(walkers.shape[0], walkers.shape[1])
+loglike_walkers = flat_chain[:, -5].reshape(walkers.shape[0], walkers.shape[1])
 max_loglike = loglike_walkers.max()
 
 # remove stuck walkers
@@ -190,17 +209,16 @@ n_burn = int(shape[0]*0.9)
 n_sample = int(shape[1]*(shape[0]-n_burn))
 
 samples = walkers[n_burn:, :, :].reshape(n_sample, shape[2])
-idx = np.argmax(flat_chain[:, -4])
-best_params = flat_chain[idx, :-4]
+idx = np.argmax(flat_chain[:, -5])
+best_params = flat_chain[idx, :-5]
 
 if 'all' in field: nfield=3
 else: nfield = len(field)
-chi2 = -flat_chain[idx, -4] / (np.sum(mask)*len(r_bins)*nfield - len(fit_par))
+chi2 = -flat_chain[idx, -5] / (np.sum(mask)*len(r_bins)*nfield - len(fit_par))
+chi2_rho_dm = -flat_chain[idx, -4] / (np.sum(mask)*len(r_bins)*nfield - len(fit_par))
 chi2_rho = -flat_chain[idx, -3] / (np.sum(mask)*len(r_bins)*nfield - len(fit_par))
 chi2_Temp = -flat_chain[idx, -2] / (np.sum(mask)*len(r_bins)*nfield - len(fit_par))
 chi2_Pe = -flat_chain[idx, -1] / (np.sum(mask)*len(r_bins)*nfield - len(fit_par))
-
-
 
 
 gd_samples = getdist.MCSamples(samples=samples, names=fit_par, labels=par_latex_names)
@@ -221,6 +239,7 @@ c = ['r', 'b', 'g', 'k']
 # Fiducial HMCode profiles
 
 fitter.update_param(fit_par, best_params)
+rho_dm_bestfit, r = fitter.get_rho_dm_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0)
 (Pe_bestfit, rho_bestfit, Temp_bestfit), r_bestfit = fitter.get_Pe_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0, return_rho=True, return_Temp=True, r_bins=r_bins)
 print(fitter)
 
@@ -232,16 +251,17 @@ inds = np.sort(np.random.choice(np.arange(np.sum(mask)), n, replace=False))
 
 
 #-------------------------- Plot random halos --------------------------#
-fig, axs = plt.subplots(1, 3, figsize=(14, 4))
-ax = axs#[0, :]
+fig, ax = plt.subplots(2, 2, figsize=(10, 8))
+ax = ax.flatten()
 
 c = plt.cm.winter(np.linspace(0,1,len(inds)))
 c2 = plt.cm.magma_r(np.linspace(0,1,len(inds)))
 
 for j, i in enumerate(inds):
-    ax[0].plot(r_bins, np.log(rho_sim[mask][i]), c=c[j], alpha=0.2)
-    ax[1].plot(r_bins, np.log(Temp_sim[mask][i]), c=c[j], alpha=0.2)
-    ax[2].plot(r_bins, np.log(Pe_sim[mask][i]), c=c[j], alpha=0.2)
+    ax[0].plot(r_bins, np.log(rho_dm_sim[mask][i]), c=c[j], alpha=0.2)
+    ax[1].plot(r_bins, np.log(rho_sim[mask][i]), c=c[j], alpha=0.2)
+    ax[2].plot(r_bins, np.log(Temp_sim[mask][i]), c=c[j], alpha=0.2)
+    ax[3].plot(r_bins, np.log(Pe_sim[mask][i]), c=c[j], alpha=0.2)
 
 scalarmappaple = ScalarMappable(cmap=plt.cm.winter)
 scalarmappaple.set_array(np.log10(Mvir_sim[mask][inds]))
@@ -265,31 +285,44 @@ cbar.set_label('log M')
 #    ax[2].plot(r_bestfit, np.log(np.median(Pe_bestfit_rand[mask], axis=0).value), c='orange', alpha=0.1)
 
 
+rho_dm_sim[rho_dm_sim==0] = np.nan
+ax[0].errorbar(r_bins, np.log(np.nanmedian(rho_dm_sim[mask], axis=0)), yerr=sigma_intr_rho_dm, ls='-.', label='Magneticum (median)')
+ax[0].plot(r_bestfit, np.log(np.median(rho_dm_bestfit[mask], axis=0).value), ls='-.', label='Best fit (median)')
+
 rho_sim[rho_sim==0] = np.nan
-ax[0].errorbar(r_bins, np.log(np.nanmedian(rho_sim[mask], axis=0)), yerr=sigma_intr_rho, ls='-.', c='k', label='Magneticum (median)')
-ax[0].plot(r_bestfit, np.log(np.median(rho_bestfit[mask], axis=0).value), ls='-.', c='orangered', label='Best fit (median)')
+
+ax[1].errorbar(r_bins, np.log(np.nanmedian(rho_sim[mask], axis=0)), yerr=sigma_intr_rho, ls='-.', label='Magneticum (median)')
+ax[1].plot(r_bestfit, np.log(np.median(rho_bestfit[mask], axis=0).value), ls='-.', label='Best fit (median)')
 
 Temp_sim[Temp_sim==0] = np.nan
-ax[1].errorbar(r_bins, np.log(np.nanmedian(Temp_sim[mask], axis=0)), yerr=sigma_intr_Temp, c='k', ls='-.')
-ax[1].plot(r_bestfit, np.log(np.median(Temp_bestfit[mask], axis=0).value), c='orangered', ls='-.')
+ax[2].errorbar(r_bins, np.log(np.nanmedian(Temp_sim[mask], axis=0)), yerr=sigma_intr_Temp, ls='-.')
+ax[2].plot(r_bestfit, np.log(np.median(Temp_bestfit[mask], axis=0).value), ls='-.')
 
 
 Pe_sim[Pe_sim==0] = np.nan
-ax[2].errorbar(r_bins, np.log(np.nanmedian(Pe_sim[mask], axis=0)), yerr=sigma_intr_Pe, c='k', ls='-.')
-ax[2].plot(r_bestfit, np.log(np.median(Pe_bestfit[mask], axis=0).value), c='orangered', ls='-.')
+ax[3].errorbar(r_bins, np.log(np.nanmedian(Pe_sim[mask], axis=0)), yerr=sigma_intr_Pe, ls='-.')
+ax[3].plot(r_bestfit, np.log(np.median(Pe_bestfit[mask], axis=0).value), ls='-.')
 
-# ax[0].set_ylim(-11.8, -5.5)
-# ax[1].set_ylim(8, 17.5)
-# ax[2].set_ylim(-17, -5)
+for i in range(4):
+	ax[i].set_xlim(0.1, 1.1)
 
-ax[0].set_ylabel('$\ln \\rho_{gas}$ [GeV/cm$^3$]')
-ax[1].set_ylabel('$\ln$ Temperature [K]')
-ax[2].set_ylabel('$\ln P_e$ [keV/cm$^3$]')
+for i in range(4):
+	ax[i].set_xscale('log')
+
+ax[0].set_ylabel('$\ln \\rho_{DM}$ [GeV/cm$^3$]')
+ax[1].set_ylabel('$\ln \\rho_{gas}$ [GeV/cm$^3$]')
+ax[2].set_ylabel('$\ln$ Temperature [K]')
+ax[3].set_ylabel('$\ln P_e$ [keV/cm$^3$]')
+
+for i in range(4):
+    ax[i].set_xlabel('$r/Rvir$')
+
 
 fig.suptitle(f'{mmin}<logM<{mmax}  '+ 'Total $\chi^2_{\mathrm{d.o.f}}=$'+f'${chi2:.2f}$')
-ax[0].set_title('Density $\chi^2_{\mathrm{d.o.f}}=$'+f'${chi2_rho:.2f}$')
-ax[1].set_title('Temperature  $\chi^2_{\mathrm{d.o.f}}=$'+f'${chi2_Temp:.2f}$')
-ax[2].set_title('Pressure $\chi^2_{\mathrm{d.o.f}}=$'+f'${chi2_Pe:.2f}$')
+ax[0].set_title('DM Density $\chi^2_{\mathrm{d.o.f}}=$'+f'${chi2_rho_dm:.2f}$')
+ax[1].set_title('Density $\chi^2_{\mathrm{d.o.f}}=$'+f'${chi2_rho:.2f}$')
+ax[2].set_title('Temperature  $\chi^2_{\mathrm{d.o.f}}=$'+f'${chi2_Temp:.2f}$')
+ax[3].set_title('Pressure $\chi^2_{\mathrm{d.o.f}}=$'+f'${chi2_Pe:.2f}$')
 ax[0].legend()
 
 ylims = [subax.get_ylim() for subax in ax]
@@ -310,50 +343,53 @@ ylims = [subax.get_ylim() for subax in ax]
 
 [subax.set_ylim(ylims[i]) for i, subax in enumerate(ax)]
 
-ax[0].set_ylabel('$\ln \\rho_{gas}$ [GeV/cm$^3$]')
-ax[1].set_ylabel('$\ln$ Temperature [K]')
-ax[2].set_ylabel('$\ln P_e$ [keV/cm$^3$]')
+ax[0].set_ylabel('$\ln \\rho_{DM}$ [GeV/cm$^3$]')
+ax[1].set_ylabel('$\ln \\rho_{gas}$ [GeV/cm$^3$]')
+ax[2].set_ylabel('$\ln$ Temperature [K]')
+ax[3].set_ylabel('$\ln P_e$ [keV/cm$^3$]')
 
-ax[0].set_xlabel('$r/Rvir$')
-ax[1].set_xlabel('$r/Rvir$')
-ax[2].set_xlabel('$r/Rvir$')
 
 plt.savefig(f'{save_path}/best_fit_profiles_{niter}_post.pdf', bbox_inches='tight')
 #plt.savefig('best_fit_profiles_re-plot2.pdf', bbox_inches='tight')
 
 #-------------------------- Plot log ratio ------------------------------#
-fig, ax = plt.subplots(1, 3, figsize=(14, 4))
+fig, ax = plt.subplots(2, 2, figsize=(10, 8))
+ax = ax.flatten()
 
 label = '$ln(\\rho_{sim}/\\rho_{theory})$'
 for j, i in enumerate(inds):
     if j>0: label='' 
-    ax[0].plot(r_bins, np.log(rho_sim/rho_bestfit.value)[mask][i], c=c[j], alpha=0.2, label=label)
-    ax[1].plot(r_bins, np.log(Temp_sim/Temp_bestfit.value)[mask][i], c=c[j], alpha=0.2)
-    ax[2].plot(r_bins, np.log(Pe_sim/Pe_bestfit.value)[mask][i], c=c[j], alpha=0.2)
+    ax[0].plot(r_bins, np.log(rho_dm_sim/rho_dm_bestfit.value)[mask][i], c=c[j], alpha=0.2, label=label)
+    ax[1].plot(r_bins, np.log(rho_sim/rho_bestfit.value)[mask][i], c=c[j], alpha=0.2, label=label)
+    ax[2].plot(r_bins, np.log(Temp_sim/Temp_bestfit.value)[mask][i], c=c[j], alpha=0.2)
+    ax[3].plot(r_bins, np.log(Pe_sim/Pe_bestfit.value)[mask][i], c=c[j], alpha=0.2)
 
 scalarmappaple = ScalarMappable(cmap=plt.cm.winter)
 scalarmappaple.set_array(np.log10(Mvir_sim[mask][inds]))
 
 # Add colorbar to the plot
-cbar = plt.colorbar(scalarmappaple, ax=ax[2])
+cbar = plt.colorbar(scalarmappaple, ax=ax[3])
 cbar.set_label('log M')
 
-ax[0].plot(r_bins, sigma_intr_rho, c='k', ls=':', label='$\sigma_{int}$')
-ax[0].plot(r_bins, -sigma_intr_rho, c='k', ls=':')
+# ax[0].plot(r_bins, sigma_intr_rho_dm, c='k', ls=':', label='$\sigma_{int}$')
+# ax[0].plot(r_bins, -sigma_intr_rho_dm, c='k', ls=':')
 
-ax[1].plot(r_bins, sigma_intr_Temp, c='k', ls=':')
-ax[1].plot(r_bins, -sigma_intr_Temp, c='k', ls=':')
+ax[1].plot(r_bins, sigma_intr_rho, c='k', ls=':', label='$\sigma_{int}$')
+ax[1].plot(r_bins, -sigma_intr_rho, c='k', ls=':')
 
-ax[2].plot(r_bins, sigma_intr_Pe, c='k', ls=':')
-ax[2].plot(r_bins, -sigma_intr_Pe, c='k', ls=':')
+ax[2].plot(r_bins, sigma_intr_Temp, c='k', ls=':')
+ax[2].plot(r_bins, -sigma_intr_Temp, c='k', ls=':')
 
-ax[0].set_ylabel('$\ln \\rho_{gas}$ [GeV/cm$^3$]')
-ax[1].set_ylabel('$\ln$ Temperature [K]')
-ax[2].set_ylabel('$\ln P_e$ [keV/cm$^3$]')
+ax[3].plot(r_bins, sigma_intr_Pe, c='k', ls=':')
+ax[3].plot(r_bins, -sigma_intr_Pe, c='k', ls=':')
 
-ax[0].set_xlabel('$r/Rvir$')
-ax[1].set_xlabel('$r/Rvir$')
-ax[2].set_xlabel('$r/Rvir$')
+ax[0].set_ylabel('$\ln \\rho_{DM}$ [GeV/cm$^3$]')
+ax[1].set_ylabel('$\ln \\rho_{gas}$ [GeV/cm$^3$]')
+ax[2].set_ylabel('$\ln$ Temperature [K]')
+ax[3].set_ylabel('$\ln P_e$ [keV/cm$^3$]')
+
+for i in range(4):
+    ax[i].set_xlabel('$r/Rvir$')
 
 ax[0].legend()
 plt.savefig(f'{save_path}/individual_prof_comparison.pdf', bbox_inches='tight')
