@@ -97,7 +97,7 @@ def joint_likelihood(x, mass_list, z=0):
 	for i in range(len(fit_par)):
 		lb, ub = bounds[fit_par[i]]
 		if x[i]<lb or x[i]>ub:
-			return -np.inf, -np.inf, -np.inf, -np.inf
+			return -np.inf, -np.inf, -np.inf, -np.inf, -np.inf
 
 	fitter.update_param(fit_par, x)
 
@@ -413,44 +413,49 @@ np.savetxt(f'{save_path}/best_params_{niter}.txt', best_params, header='\t'.join
 ########## Compare best-fit profiles ##########
 c = ['r', 'b', 'g', 'k']
 
-bins = [13.5, 14, 14.5, 15]
 # Fiducial HMCode profiles
 fitter.update_param(fit_par, best_params)
+rho_dm_bestfit = fitter.get_rho_dm_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0)
 (Pe_bestfit, rho_bestfit, Temp_bestfit), r_bestfit = fitter.get_Pe_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0, return_rho=True, return_Temp=True)
 
 
 ## Plot median Pe profiles
-fig, ax = plt.subplots(1, 3, figsize=(14, 4))
+fig, ax = plt.subplots(2, 2, figsize=(10, 8))
+ax = ax.flatten()
 
-rho_sim[rho_sim==0] = np.nan
-
+rho_dm_sim[rho_dm_sim==0] = np.nan
 ax[0].errorbar(r_bins, np.log(np.nanmedian(rho_sim[mask], axis=0)), yerr=sigma_intr_rho, ls='-.', label='Magneticum (median)')
 ax[0].plot(r_bestfit, np.log(np.median(rho_bestfit[mask], axis=0).value), ls='-.', label='Best fit (median)')
 
+rho_sim[rho_sim==0] = np.nan
+
+ax[1].errorbar(r_bins, np.log(np.nanmedian(rho_sim[mask], axis=0)), yerr=sigma_intr_rho, ls='-.', label='Magneticum (median)')
+ax[1].plot(r_bestfit, np.log(np.median(rho_bestfit[mask], axis=0).value), ls='-.', label='Best fit (median)')
+
 Temp_sim[Temp_sim==0] = np.nan
-ax[1].errorbar(r_bins, np.log(np.nanmedian(Temp_sim[mask], axis=0)), yerr=sigma_intr_Temp, ls='-.')
-ax[1].plot(r_bestfit, np.log(np.median(Temp_bestfit[mask], axis=0).value), ls='-.')
+ax[2].errorbar(r_bins, np.log(np.nanmedian(Temp_sim[mask], axis=0)), yerr=sigma_intr_Temp, ls='-.')
+ax[2].plot(r_bestfit, np.log(np.median(Temp_bestfit[mask], axis=0).value), ls='-.')
 
 
 Pe_sim[Pe_sim==0] = np.nan
-ax[2].errorbar(r_bins, np.log(np.nanmedian(Pe_sim[mask], axis=0)), yerr=sigma_intr_Pe, ls='-.')
-ax[2].plot(r_bestfit, np.log(np.median(Pe_bestfit[mask], axis=0).value), ls='-.')
+ax[3].errorbar(r_bins, np.log(np.nanmedian(Pe_sim[mask], axis=0)), yerr=sigma_intr_Pe, ls='-.')
+ax[3].plot(r_bestfit, np.log(np.median(Pe_bestfit[mask], axis=0).value), ls='-.')
 
-ax[0].set_xlim(0.1, 1.1)
-ax[1].set_xlim(0.1, 1.1)
-ax[2].set_xlim(0.1, 1.1)
+for i in range(4):
+	ax[i].set_xlim(0.1, 1.1)
 
-ax[0].set_xscale('log')
-ax[1].set_xscale('log')
-ax[2].set_xscale('log')
+for i in range(4):
+	ax[i].set_xscale('log')
 
-ax[0].set_ylabel('$\ln \\rho_{gas}$ [GeV/cm$^3$]')
-ax[1].set_ylabel('$\ln$ Temperature [K]')
-ax[2].set_ylabel('$\ln P_e$ [keV/cm$^3$]')
+ax[0].set_ylabel('$\ln \\rho_{DM}$ [GeV/cm$^3$]')
+ax[1].set_ylabel('$\ln \\rho_{gas}$ [GeV/cm$^3$]')
+ax[2].set_ylabel('$\ln$ Temperature [K]')
+ax[3].set_ylabel('$\ln P_e$ [keV/cm$^3$]')
 
 ax[0].set_xlabel('$r/Rvir$')
 ax[1].set_xlabel('$r/Rvir$')
 ax[2].set_xlabel('$r/Rvir$')
+ax[3].set_xlabel('$r/Rvir$')
 
 ax[1].set_title(f'{mmin}<logM<{mmax}')
 ax[0].legend()
