@@ -545,7 +545,7 @@ class Profile():
 			Pe_difference, rho_difference, Temp_difference = 0., 0., 0.
 			for j, m in enumerate(Ms):
 				true_rho_dm_prof, _ = self.get_rho_dm_profile(m, z)
-				true_rho_dm_prof = tru_rho_dm_prof.value
+				true_rho_dm_prof = true_rho_dm_prof.value
 
 				true_profs,_ = self.get_Pe_profile(m, z, return_rho=True, return_Temp=True)
 				true_Pe_prof, true_rho_prof, true_Temp_prof = true_profs[0].value, true_profs[1].value, true_profs[2].value
