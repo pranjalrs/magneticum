@@ -135,7 +135,8 @@ bounds = {'f_H': [0.65, 0.85],
                  'a': [0, 0.2],
                  'b': [0, 2],
                 'alpha_nt': [0, 2],
-                'n_nt': [0, 2]}
+                'n_nt': [0, 2],
+                 'conc_param': [0, 30]}
 
 fid_val = {'f_H': 0.75,
                 'gamma': 1.2,
@@ -149,7 +150,8 @@ fid_val = {'f_H': 0.75,
                   'a': 0.1,
                   'b': 0.1,
                 'alpha_nt':1,
-                'n_nt':1}
+                'n_nt':1,
+                'conc_param': 8}
 
 std_dev = {'f_H': 0.2,
                 'gamma': 0.2,
@@ -162,12 +164,15 @@ std_dev = {'f_H': 0.2,
                 'gamma_T':0.3,
                  'a': 0.02,
                  'b': 0.1,
-                'alpha_nt':0.4,
-                'n_nt':0.4}
+                'alpha_nt': 0.4,
+                'n_nt': 0.4,
+                'conc_param': 2}
 
 #####-------------- Load Data --------------#####
-save_path = f'../../magneticum-data/data/emcee_magneticum_cM/prof_{args.field}_halos_bin/{run}'
-# save_path = f'../../magneticum-data/data/emcee_new/prof_{args.field}_halos_bin/{run}'
+#save_path = f'../../magneticum-data/data/emcee_magneticum_cM/prof_{args.field}_halos_bin/{run}'
+#save_path = f'../../magneticum-data/data/emcee_new/prof_{args.field}_halos_bin/{run}'
+save_path = f'../../magneticum-data/data/emcee_concentration/prof_{args.field}_halos_bin/{run}'
+
 data_path = '../../magneticum-data/data/profiles_median'
 files = glob.glob(f'{data_path}/Box1a/Pe_Pe_Mead_Temp_matter_cdm_gas_v_disp_z=0.00_mvir_1.0E+13_1.0E+16.pkl')
 files += glob.glob(f'{data_path}/Box2/Pe_Pe_Mead_Temp_matter_cdm_gas_v_disp_z=0.00_mvir_1.0E+12_1.0E+13.pkl')
@@ -306,16 +311,19 @@ print('Finished processing simulation data...')
 print(f'Using {np.sum(mask)} halos for fit...')
 
 #####-------------- Prepare for MCMC --------------#####
-fitter = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=Mvir_sim.max()+1e10, imass_conc=1)
+fitter = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=Mvir_sim.max()+1e10, imass_conc=2)
 print('Initialized profile fitter ...')
 #fit_par = ['gamma', 'alpha', 'log10_M0', 'eps1_0', 'eps2_0', 'gamma_T_1', 'gamma_T_2', 'alpha_nt', 'n_nt']
 #par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}^1', '\Gamma_\mathrm{T}^2', '\\alpha_{nt}', 'n_{nt}']
 
-fit_par = ['gamma', 'alpha', 'log10_M0', 'eps1_0', 'eps2_0', 'gamma_T']#, 'a']
-par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}']#, 'a']
+#fit_par = ['gamma', 'alpha', 'log10_M0', 'eps1_0', 'eps2_0', 'gamma_T']#, 'a']
+#par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}']#, 'a']
 
-#fit_par = ['gamma', 'log10_M0', 'eps1_0', 'eps2_0']
-#par_latex_names = ['\Gamma', '\log_{10}M_0', '\epsilon_1', '\epsilon_2']
+#fit_par = ['gamma', 'log10_M0', 'eps1_0']
+#par_latex_names = ['\Gamma', '\log_{10}M_0', '\epsilon_1']
+
+fit_par = ['conc_param']
+par_latex_names = ['c(M)']
 
 starting_point = [fid_val[k] for k in fit_par]
 std = [std_dev[k] for k in fit_par]
@@ -397,7 +405,13 @@ all_samples = np.concatenate((chain, log_prob_flat[:, None], blobs_flat['loglike
 
 
 fig, ax = plt.subplots(len(fit_par), 1, figsize=(10, 1.5*len(fit_par)))
-ax = ax.flatten()
+
+
+if len(fit_par)==1:
+    ax = np.array([ax])
+
+else:
+    ax = ax.flatten()
 
 for i in range(len(fit_par)):
 	ax[i].plot(walkers[:, :, i])
