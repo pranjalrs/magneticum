@@ -253,18 +253,19 @@ for f in files:
 # Since this is what the scipy interpolator expects
 Mvir_sim = np.array(Mvir_sim, dtype='float32')
 sorting_indices = np.argsort(Mvir_sim)
-
+Mvir_sim = Mvir_sim[sorting_indices]
 mask = (Mvir_sim>=10**(mmin)) & (Mvir_sim<10**mmax)
+print(f'{np.log10(Mvir_sim[mask].min()):.2f}, {np.log10(Mvir_sim[mask].max()):.2f}')
+
 idx = np.arange(10)
 r_bins = r_bins[idx]
-
 
 
 rho_dm_sim = np.array(rho_dm_sim, dtype='float32')[sorting_indices][:, idx]
 Pe_sim = np.array(Pe_sim, dtype='float32')[sorting_indices][:, idx]
 rho_sim = np.array(rho_sim, dtype='float32')[sorting_indices][:, idx]
 Temp_sim = np.array(Temp_sim, dtype='float32')[sorting_indices][:, idx]
-Mvir_sim = Mvir_sim[sorting_indices]
+
 
 #---------------------- rho_dm ----------------------#
 rho_dm_rescale = np.vstack(rho_dm_rescale)[sorting_indices][:, idx]
