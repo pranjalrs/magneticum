@@ -62,7 +62,7 @@ class Profile():
 		# 1 for (Magneticum) Ragagnin 2021
 		# 2 for concentration as free parameter
 		self.imass_conc = 0
-		self.conc_param = None
+		self.conc_param = 8
 
 		## Are you going to run MCMC?
 		## This enables an interpolator for the profile
