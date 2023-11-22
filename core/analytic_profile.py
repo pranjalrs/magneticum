@@ -463,8 +463,9 @@ class Profile():
 		if self.imass_conc == 1:
 			# Table 2 in arXiv:2011.05345
 			MSCALE = 19.9e13*0.704*u.Msun/cu.littleh
-			zp = 1/(1 + 0.877)
-			c_M = 1.5* (M/MSCALE)**(-0.04) * ((1+z)/(1+zp))**(-0.52)
+			ap = 0.877
+			a = 1/(1+z)
+			c_M = np.exp(1.5)* (M/MSCALE)**(-0.04) * (a/ap)**(-0.52)
 		
 		if self.imass_conc == 2:
 			return self.conc_param
