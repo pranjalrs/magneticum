@@ -327,7 +327,7 @@ nsteps = args.nsteps
 if niter>1:
 	print('Recomputing scatter using best fit parameters from previous iteration...')
 	best_params_prev_iter = np.loadtxt(f'{save_path}/best_params_{niter-1}.txt', skiprows=1)
-	sigma_intr_Pe, sigma_intr_rho, sigma_intr_Temp = recompute_best_fit_scatter(best_params_prev_iter)
+	sigma_intr_rho_dm, sigma_intr_Pe, sigma_intr_rho, sigma_intr_Temp = recompute_best_fit_scatter(best_params_prev_iter)
 	starting_point = best_params_prev_iter
 
 
@@ -415,7 +415,6 @@ np.savetxt(f'{save_path}/all_samples_{niter}.txt', all_samples)
 np.savetxt(f'{save_path}/sigma_intr_{niter}.txt',  np.column_stack((sigma_intr_rho_dm, sigma_intr_rho, sigma_intr_Temp, sigma_intr_Pe)))
 np.savetxt(f'{save_path}/best_params_{niter}.txt', best_params, header='\t'.join(fit_par))
 ########## Compare best-fit profiles ##########
-c = ['r', 'b', 'g', 'k']
 
 # Fiducial HMCode profiles
 fitter.update_param(fit_par, best_params)
