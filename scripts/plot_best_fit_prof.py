@@ -46,8 +46,8 @@ def colorbar(mappable):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--field')
-parser.add_argument('--mmin', type=int)
-parser.add_argument('--mmax', type=int)
+parser.add_argument('--mmin', type=float)
+parser.add_argument('--mmax', type=float)
 parser.add_argument('--run', type=str)
 parser.add_argument('--niter', type=str)
 
@@ -150,7 +150,6 @@ for f in files:
 Mvir_sim = np.array(Mvir_sim, dtype='float32')
 sorting_indices = np.argsort(Mvir_sim)
 
-mask = (Mvir_sim>=10**(mmin)) & (Mvir_sim<10**mmax)
 idx = np.arange(10)
 r_bins = r_bins[idx]
 
@@ -161,6 +160,9 @@ Pe_sim = np.array(Pe_sim, dtype='float32')[sorting_indices][:, idx]
 rho_sim = np.array(rho_sim, dtype='float32')[sorting_indices][:, idx]
 Temp_sim = np.array(Temp_sim, dtype='float32')[sorting_indices][:, idx]
 Mvir_sim = Mvir_sim[sorting_indices]
+
+mask = (Mvir_sim>=10**(mmin)) & (Mvir_sim<10**mmax)
+print(f'{np.log10(Mvir_sim[mask].min()):.2f}, {np.log10(Mvir_sim[mask].max()):.2f}')
 
 #---------------------- rho_dm ----------------------#
 rho_dm_rescale = np.vstack(rho_dm_rescale)[sorting_indices][:, idx]
@@ -179,23 +181,26 @@ sigma_lnTemp = np.vstack(sigma_lnTemp)[sorting_indices][:, idx]
 print('Finished processing simulation data...')
 
 #####-------------- Load MCMC Data --------------#####
-# fit_par = ['gamma', 'alpha', 'log10_M0', 'eps1_0', 'eps2_0', 'gamma_T']
-# par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}']
+#fit_par = ['gamma', 'alpha', 'log10_M0', 'eps1_0', 'eps2_0', 'gamma_T']
+#par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}']
 
 fit_par = ['gamma', 'log10_M0', 'eps1_0', 'eps2_0']
 par_latex_names = ['\Gamma', '\log_{10}M_0', '\epsilon_1', '\epsilon_2']
 
-fitter = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=Mvir_sim.max()+1e10, imass_conc=1)
+fit_par = ['conc_param']
+par_latex_names = ['c(M)']
+
+fitter = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=Mvir_sim.max()+1e10, imass_conc=2)
 
 field = args.field.strip('"').split(',')
 #save_path = f'../../magneticum-data/data/emcee_new/prof_{args.field}_halos_bin/{run}'
-save_path = f'../../magneticum-data/data/emcee_magneticum_cM/prof_{args.field}_halos_bin/{run}'
+save_path = f'../../magneticum-data/data/emcee_concentration/prof_{args.field}_halos_bin/{run}'
 
 walkers = np.load(f'{save_path}/all_walkers_{niter}.npy')
 flat_chain = np.loadtxt(f'{save_path}/all_samples_{niter}.txt')
 
 sigma_int = np.loadtxt(f'{save_path}/sigma_intr_{niter}.txt')
-sigma_intr_rho, sigma_intr_Temp, sigma_intr_Pe = sigma_int[:, 0], sigma_int[:, 1], sigma_int[:, 2]
+sigma_intr_rho_dm, sigma_intr_rho, sigma_intr_Temp, sigma_intr_Pe = sigma_int[:, 0], sigma_int[:, 1], sigma_int[:, 2], sigma_int[:, 3]
 
 loglike_walkers = flat_chain[:, -5].reshape(walkers.shape[0], walkers.shape[1])
 max_loglike = loglike_walkers.max()
@@ -225,7 +230,13 @@ gd_samples = getdist.MCSamples(samples=samples, names=fit_par, labels=par_latex_
 
 #####-------------- Plot and Save --------------#####
 fig, ax = plt.subplots(len(fit_par), 1, figsize=(10, 1.5*len(fit_par)))
-ax = ax.flatten()
+
+if len(fit_par)==1:
+    ax = np.array([ax])
+
+else:
+    ax = ax.flatten()
+
 for i in range(len(fit_par)):
 	ax[i].plot(walkers[:, :, i])
 	ax[i].set_ylabel(f'${par_latex_names[i]}$')
@@ -239,7 +250,7 @@ c = ['r', 'b', 'g', 'k']
 # Fiducial HMCode profiles
 
 fitter.update_param(fit_par, best_params)
-rho_dm_bestfit, r = fitter.get_rho_dm_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0)
+rho_dm_bestfit, r = fitter.get_rho_dm_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0, r_bins=r_bins)
 (Pe_bestfit, rho_bestfit, Temp_bestfit), r_bestfit = fitter.get_Pe_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0, return_rho=True, return_Temp=True, r_bins=r_bins)
 print(fitter)
 
@@ -251,7 +262,7 @@ inds = np.sort(np.random.choice(np.arange(np.sum(mask)), n, replace=False))
 
 
 #-------------------------- Plot random halos --------------------------#
-fig, ax = plt.subplots(2, 2, figsize=(10, 8))
+fig, ax = plt.subplots(2, 2, figsize=(10, 10))
 ax = ax.flatten()
 
 c = plt.cm.winter(np.linspace(0,1,len(inds)))
@@ -268,10 +279,10 @@ scalarmappaple.set_array(np.log10(Mvir_sim[mask][inds]))
 
 # Add colorbar to the plot
 # cbar = plt.colorbar(scalarmappaple, ax=ax[0], location='top')
-divider = make_axes_locatable(ax[2])
+divider = make_axes_locatable(ax[3])
 cax = divider.append_axes("right", size="5%", pad=0.05)
 cbar = fig.colorbar(scalarmappaple, cax=cax)
-plt.sca(ax[2])
+plt.sca(ax[3])
 # colorbar(scalarmappaple)
 cbar.set_label('log M')
 
@@ -286,7 +297,8 @@ cbar.set_label('log M')
 
 
 rho_dm_sim[rho_dm_sim==0] = np.nan
-ax[0].errorbar(r_bins, np.log(np.nanmedian(rho_dm_sim[mask], axis=0)), yerr=sigma_intr_rho_dm, ls='-.', label='Magneticum (median)')
+# ax[0].errorbar(r_bins, np.log(np.nanmedian(rho_dm_sim[mask], axis=0)), yerr=sigma_intr_rho_dm, ls='-.', label='Magneticum (median)')
+ax[0].errorbar(r_bins, np.log(np.nanmedian(rho_dm_sim[mask], axis=0)), ls='-.', label='Magneticum (median)')
 ax[0].plot(r_bestfit, np.log(np.median(rho_dm_bestfit[mask], axis=0).value), ls='-.', label='Best fit (median)')
 
 rho_sim[rho_sim==0] = np.nan
