@@ -5,8 +5,11 @@ import os
 os.environ["OMP_NUM_THREADS"] = "1"
 
 import argparse
+import glob
 import joblib
 import matplotlib.pyplot as plt
+from matplotlib.cm import ScalarMappable
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 import numpy.ma as ma
 from scipy.interpolate import interp1d
@@ -14,10 +17,10 @@ from schwimmbad import MPIPool
 
 import astropy.units as u
 import astropy.cosmology.units as cu
+import emcee
 import getdist
 from getdist import plots
-import glob
-import emcee
+import hmf
 
 import sys
 sys.path.append('../core/')
@@ -33,10 +36,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--field')
 parser.add_argument('--test', type=bool, default=False)
 parser.add_argument('--run', type=str)
+parser.add_argument('--niter', type=int)
 parser.add_argument('--nsteps', type=int)
+
 args = parser.parse_args()
 test = args.test
-run = args.run
+run, niter = args.run, args.niter
+field = args.field.strip('"').split(',')
 
 #####-------------- Likelihood --------------#####
 
@@ -75,7 +81,7 @@ def likelihood(theory_prof, field):
 	num = np.log(sim_prof[~mask_low_mass] / theory_prof.value[~mask_low_mass])**2
 	denom = globals()[f'sigma_intr_{field}_init_low_mass']**2 #+ sigmalnP_sim**2
 	num = ma.array(num, mask=idx, fill_value=0)
-	chi2 += 0.5*np.sum(num/denom)  # Sum over radial bins
+	chi2 += 0.5*np.sum(num/denom)*weight_factor  # Sum over radial bins
 
 	if not np.isfinite(chi2):
 		return -np.inf
@@ -149,10 +155,35 @@ std_dev = {'f_H': 0.2,
 
 
 #####-------------- Load Data --------------#####
-save_path = f'../../magneticum-data/data/emcee_magneticum_cM/prof_{args.field}_halos_bin/{run}'
+save_path = f'../../magneticum-data/data/emcee_new/prof_{args.field}_halos_all/{run}'
 data_path = '../../magneticum-data/data/profiles_median'
 files = glob.glob(f'{data_path}/Box1a/Pe_Pe_Mead_Temp_matter_cdm_gas_v_disp_z=0.00_mvir_1.0E+13_1.0E+16.pkl')
 files += glob.glob(f'{data_path}/Box2/Pe_Pe_Mead_Temp_matter_cdm_gas_v_disp_z=0.00_mvir_1.0E+12_1.0E+13.pkl')
+
+#####-------------- Weight for low mass halos --------------#####
+
+N_high = len(joblib.load(files[0]))
+N_low = len(joblib.load(files[1]))
+
+theory_mf = hmf.MassFunction(cosmo_model="WMAP7", mdef_model='SOVirial', z=0, sigma_8=0.809)
+delta_m = np.array(0.01*theory_mf.m)
+
+# 10^13<m<10^16
+index = np.where((theory_mf.m<10**16) & (theory_mf.m>10**13.))  # Select dn/dM in mass bin
+counts = np.sum(theory_mf.dndm[index]*delta_m[index])  # Sum (dn/dM * delta M)
+N_high_hmf = counts
+
+# 10^11<m<10^13
+index = np.where((theory_mf.m<10**13) & (theory_mf.m>10**12))  # Select dn/dM in mass bin
+counts = np.sum(theory_mf.dndm[index]*delta_m[index])  # Sum (dn/dM * delta M)
+N_low_hmf = counts
+
+N_expected = (N_low_hmf/N_high_hmf) * N_high
+weight_factor = N_expected/N_low
+
+print(f'Expected # of low mass halos given {N_high} high mass halos = {N_expected}')
+print(f'# of low mass halos sampled = {N_low}')
+print(f'Weight factor = {weight_factor}')
 
 ## We will interpolate all measured profiles to the same r_bins as 
 ## the analytical profile for computational efficiency
@@ -292,13 +323,18 @@ sigma_intr_Temp_init_low_mass[-1] = 0.1
 
 
 print('Finished processing simulation data...')
+print(f'# of low mass halos = {len(rho_dm_sim[~mask_low_mass])}')
+print(f'# of high mass halos = {len(rho_dm_sim[mask_low_mass])}')
+
 #####-------------- Prepare for MCMC --------------#####
-fitter_low_mass = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=1e13+1e10)
-fitter_high_mass = Profile(use_interp=True, mmin=1e13-1e10, mmax=Mvir_sim.max()+1e10)
+fitter = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=Mvir_sim.max()+1e10)
 
 print('Initialized profile fitter ...')
 fit_par = ['gamma', 'alpha', 'log10_M0', 'eps1_0', 'eps2_0', 'gamma_T']
 par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}']
+
+#fit_par = ['log10_M0', 'eps1_0', 'eps2_0']
+#par_latex_names = ['\log_{10}M_0', '\epsilon_1', '\epsilon_2']
 
 starting_point = [fid_val[k] for k in fit_par]
 std = [std_dev[k] for k in fit_par]
@@ -319,12 +355,11 @@ for i, key in enumerate(fit_par):
 print(f'Finished initializing {nwalkers} walkers...')
 
 
-field = args.field.strip('"').split(',')
 print(f'Using Likelihood for {field} field(s)')
 
 
 def test_interpolator(walkers):
-	test_interp = Profile(use_interp=True, mmin=10**(mmin)-1e10, mmax=10**(mmax)+1e10, interp_error_tol = 0.1)
+	test_interp = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=Mvir_sim.max()+1e10, interp_error_tol = 0.1)
 
 	for row in p0_walkers:
 		test_interp.update_param(fit_par, np.array(row))
@@ -368,11 +403,21 @@ blobs_flat = sampler.get_blobs(flat=True)
 idx = np.argmax(log_prob_flat)
 best_params = chain[idx]
 
+
+
 all_samples = np.concatenate((chain, log_prob_flat[:, None], blobs_flat['loglike_rho_dm'][:, None], 
 							blobs_flat['loglike_rho'][:, None], 
 							blobs_flat['loglike_Temp'][:, None], 
 							blobs_flat['loglike_Pe'][:, None]), axis=1)
 
+if 'all' in field: nfield=3
+else: nfield = len(field)
+
+chi2 = -all_samples[idx, -5] / (len(Mvir_sim)*len(r_bins)*nfield - len(fit_par))
+chi2_rho_dm = -all_samples[idx, -4] / (len(Mvir_sim)*len(r_bins)*nfield - len(fit_par))
+chi2_rho = -all_samples[idx, -3] / (len(Mvir_sim)*len(r_bins)*nfield - len(fit_par))
+chi2_Temp = -all_samples[idx, -2] / (len(Mvir_sim)*len(r_bins)*nfield - len(fit_par))
+chi2_Pe = -all_samples[idx, -1] / (len(Mvir_sim)*len(r_bins)*nfield - len(fit_par))
 
 fig, ax = plt.subplots(len(fit_par), 1, figsize=(10, 1.5*len(fit_par)))
 ax = ax.flatten()
@@ -393,7 +438,11 @@ gd_samples = getdist.MCSamples(samples=sampler.get_chain(flat=True, discard=int(
 
 np.save(f'{save_path}/all_walkers_{niter}.npy', walkers)
 np.savetxt(f'{save_path}/all_samples_{niter}.txt', all_samples)
-np.savetxt(f'{save_path}/sigma_intr_{niter}.txt',  np.column_stack((sigma_intr_rho_dm, sigma_intr_rho, sigma_intr_Temp, sigma_intr_Pe)))
+
+np.savetxt(f'{save_path}/sigma_intr_high_mass_{niter}.txt',  np.column_stack((sigma_intr_rho_dm_init_high_mass, sigma_intr_rho_init_high_mass, sigma_intr_Temp_init_high_mass, sigma_intr_Pe_init_high_mass)))
+
+np.savetxt(f'{save_path}/sigma_intr_low_mass_{niter}.txt',  np.column_stack((sigma_intr_rho_dm_init_low_mass, sigma_intr_rho_init_low_mass, sigma_intr_Temp_init_low_mass, sigma_intr_Pe_init_low_mass)))
+
 np.savetxt(f'{save_path}/best_params_{niter}.txt', best_params, header='\t'.join(fit_par))
 
 ########## Compare best-fit profiles ##########
@@ -403,24 +452,71 @@ rho_dm_bestfit, r = fitter.get_rho_dm_profile_interpolated(Mvir_sim*u.Msun/cu.li
 (Pe_bestfit, rho_bestfit, Temp_bestfit), r_bestfit = fitter.get_Pe_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0, return_rho=True, return_Temp=True)
 
 
+
+n=1000
+inds1 = np.sort(np.random.choice(np.arange(len(Mvir_sim)), n, replace=False))
+inds2 = np.sort(np.random.choice(np.arange(np.sum(mask_low_mass)), n, replace=False)) # Random High mass
+inds3 = np.sort(np.random.choice(np.arange(np.sum(~mask_low_mass)), n, replace=False)) # Random Low mass
+
+c = plt.cm.winter(np.linspace(0,1,len(Mvir_sim)))
+
 ## Plot median Pe profiles
 fig, ax = plt.subplots(3, 4, figsize=(18, 12))
+
+
+for idx1, idx2, idx3 in zip(inds1, inds2, inds3):
+    
+    m = Mvir_sim[idx1]
+    j = np.where(Mvir_sim==m)[0][0]
+    ax[0, 0].plot(r_bins, np.log(rho_dm_sim[idx1]), c=c[j], alpha=0.2)
+    ax[0, 1].plot(r_bins, np.log(rho_sim[idx1]), c=c[j], alpha=0.2)
+    ax[0, 2].plot(r_bins, np.log(Temp_sim[idx1]), c=c[j], alpha=0.2)
+    ax[0, 3].plot(r_bins, np.log(Pe_sim[idx1]), c=c[j], alpha=0.2)
+
+    m = Mvir_sim[mask_low_mass][idx2]
+    j = np.where(Mvir_sim==m)[0][0]
+    ax[1, 0].plot(r_bins, np.log(rho_dm_sim[mask_low_mass][idx2]), c=c[j], alpha=0.2)
+    ax[1, 1].plot(r_bins, np.log(rho_sim[mask_low_mass][idx2]), c=c[j], alpha=0.2)
+    ax[1, 2].plot(r_bins, np.log(Temp_sim[mask_low_mass][idx2]), c=c[j], alpha=0.2)
+    ax[1, 3].plot(r_bins, np.log(Pe_sim[mask_low_mass][idx2]), c=c[j], alpha=0.2)
+    
+    m = Mvir_sim[~mask_low_mass][idx3]
+    j = np.where(Mvir_sim==m)[0][0]
+    ax[2, 0].plot(r_bins, np.log(rho_dm_sim[~mask_low_mass][idx3]), c=c[j], alpha=0.2)
+    ax[2, 1].plot(r_bins, np.log(rho_sim[~mask_low_mass][idx3]), c=c[j], alpha=0.2)
+    ax[2, 2].plot(r_bins, np.log(Temp_sim[~mask_low_mass][idx3]), c=c[j], alpha=0.2)
+    ax[2, 3].plot(r_bins, np.log(Pe_sim[~mask_low_mass][idx3]), c=c[j], alpha=0.2)
+
+scalarmappaple = ScalarMappable(cmap=plt.cm.winter)
+scalarmappaple.set_array(np.log10(Mvir_sim))
+
+# Add colorbar to the plot
+# cbar = plt.colorbar(scalarmappaple, ax=ax[0], location='top')
+divider = make_axes_locatable(ax[0, 3])
+cax = divider.append_axes("right", size="5%", pad=0.05)
+cbar = fig.colorbar(scalarmappaple, cax=cax)
+plt.sca(ax[0, 3])
+# colorbar(scalarmappaple)
+cbar.set_label('log M')
+
+
 ### -------------------------- All halos -------------------------####
+col1, col2 = 'red', 'orange'
 rho_sim[rho_sim==0] = np.nan
 Temp_sim[Temp_sim==0] = np.nan
 Pe_sim[Pe_sim==0] = np.nan
 
-ax[0, 0].loglog(r_bins, np.nanmedian(rho_dm_sim, axis=0), label='Magneticum (median)')
-ax[0, 0].loglog(r_bestfit, np.median(rho_dm_bestfit, axis=0), label='Best fit (median)')
+ax[0, 0].plot(r_bins, np.log(np.nanmedian(rho_dm_sim, axis=0)), c=col1,label='Magneticum (median)')
+ax[0, 0].plot(r_bestfit, np.log(np.median(rho_dm_bestfit, axis=0).value), c=col2, label='Best fit (median)')
 
-ax[0, 1].loglog(r_bins, np.nanmedian(rho_sim, axis=0), label='Magneticum (median)')
-ax[0, 1].loglog(r_bestfit, np.median(rho_bestfit, axis=0), label='Best fit (median)')
+ax[0, 1].plot(r_bins, np.log(np.nanmedian(rho_sim, axis=0)), c=col1,label='Magneticum (median)')
+ax[0, 1].plot(r_bestfit, np.log(np.median(rho_bestfit, axis=0).value), c=col2, label='Best fit (median)')
 
-ax[0, 2].loglog(r_bins, np.nanmedian(Temp_sim, axis=0))
-ax[0, 2].loglog(r_bestfit, np.median(Temp_bestfit, axis=0))
+ax[0, 2].plot(r_bins, np.log(np.nanmedian(Temp_sim, axis=0)), c=col1,)
+ax[0, 2].plot(r_bestfit, np.log(np.median(Temp_bestfit, axis=0).value), c=col2, )
 
-ax[0, 3].loglog(r_bins, np.nanmedian(Pe_sim, axis=0))
-ax[0, 3].loglog(r_bestfit, np.median(Pe_bestfit, axis=0))
+ax[0, 3].plot(r_bins, np.log(np.nanmedian(Pe_sim, axis=0)), c=col1,)
+ax[0, 3].plot(r_bestfit, np.log(np.median(Pe_bestfit, axis=0).value), c=col2, )
 
 ax[0, 0].legend()
 
@@ -428,51 +524,58 @@ ax[0, 0].legend()
 ax[1,1].set_title('All halos')
 
 ### -------------------------- High mass halos -------------------------####
-ax[1, 0].errorbar(r_bins, np.log(np.nanmedian(rho_dm_sim[mask_low_mass], axis=0)), yerr=sigma_intr_rho_dm_init_high_mass, ls='-.', label='Magneticum (median)')
-ax[1, 0].plot(r_bestfit, np.log(np.median(rho_dm_bestfit[mask_low_mass], axis=0).value), ls='-.', label='Best fit (median)')
+ax[1, 0].errorbar(r_bins, np.log(np.nanmedian(rho_dm_sim[mask_low_mass], axis=0)), yerr=sigma_intr_rho_dm_init_high_mass, c=col1, ls='-.', label='Magneticum (median)')
+ax[1, 0].plot(r_bestfit, np.log(np.median(rho_dm_bestfit[mask_low_mass], axis=0).value), c=col2, ls='-.', label='Best fit (median)')
 
-ax[1, 1].errorbar(r_bins, np.log(np.nanmedian(rho_sim[mask_low_mass], axis=0)), yerr=sigma_intr_rho_init_high_mass, ls='-.', label='Magneticum (median)')
-ax[1, 1].plot(r_bestfit, np.log(np.median(rho_bestfit[mask_low_mass], axis=0).value), ls='-.', label='Best fit (median)')
+ax[1, 1].errorbar(r_bins, np.log(np.nanmedian(rho_sim[mask_low_mass], axis=0)), yerr=sigma_intr_rho_init_high_mass, c=col1, ls='-.', label='Magneticum (median)')
+ax[1, 1].plot(r_bestfit, np.log(np.median(rho_bestfit[mask_low_mass], axis=0).value), c=col2, ls='-.', label='Best fit (median)')
 
-ax[1, 2].errorbar(r_bins, np.log(np.nanmedian(Temp_sim[mask_low_mass], axis=0)), yerr=sigma_intr_Temp_init_high_mass, ls='-.')
-ax[1, 2].plot(r_bestfit, np.log(np.median(Temp_bestfit[mask_low_mass], axis=0).value), ls='-.')
+ax[1, 2].errorbar(r_bins, np.log(np.nanmedian(Temp_sim[mask_low_mass], axis=0)), yerr=sigma_intr_Temp_init_high_mass, c=col1, ls='-.')
+ax[1, 2].plot(r_bestfit, np.log(np.median(Temp_bestfit[mask_low_mass], axis=0).value), c=col2, ls='-.')
 
 
-ax[1, 3].errorbar(r_bins, np.log(np.nanmedian(Pe_sim[mask_low_mass], axis=0)), yerr=sigma_intr_Pe_init_high_mass, ls='-.')
-ax[1, 3].plot(r_bestfit, np.log(np.median(Pe_bestfit[mask_low_mass], axis=0).value), ls='-.')
+ax[1, 3].errorbar(r_bins, np.log(np.nanmedian(Pe_sim[mask_low_mass], axis=0)), yerr=sigma_intr_Pe_init_high_mass, c=col1, ls='-.')
+ax[1, 3].plot(r_bestfit, np.log(np.median(Pe_bestfit[mask_low_mass], axis=0).value), c=col2, ls='-.')
 
 
 ax[1,1].set_title('13<logM<15')
 
 ### -------------------------- Low mass halos -------------------------####
-ax[2, 0].errorbar(r_bins, np.log(np.nanmedian(rho_dm_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_rho_dm_init_low_mass, ls='-.', label='Magneticum (median)')
-ax[2, 0].plot(r_bestfit, np.log(np.median(rho_dm_bestfit[~mask_low_mass], axis=0).value), ls='-.', label='Best fit (median)')
+ax[2, 0].errorbar(r_bins, np.log(np.nanmedian(rho_dm_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_rho_dm_init_low_mass, c=col1,  ls='-.', label='Magneticum (median)')
+ax[2, 0].plot(r_bestfit, np.log(np.median(rho_dm_bestfit[~mask_low_mass], axis=0).value), c=col2, ls='-.', label='Best fit (median)')
 
-ax[2, 1].errorbar(r_bins, np.log(np.nanmedian(rho_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_rho_init_low_mass, ls='-.', label='Magneticum (median)')
-ax[2, 1].plot(r_bestfit, np.log(np.median(rho_bestfit[~mask_low_mass], axis=0).value), ls='-.', label='Best fit (median)')
+ax[2, 1].errorbar(r_bins, np.log(np.nanmedian(rho_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_rho_init_low_mass, c=col1, ls='-.', label='Magneticum (median)')
+ax[2, 1].plot(r_bestfit, np.log(np.median(rho_bestfit[~mask_low_mass], axis=0).value), c=col2, ls='-.', label='Best fit (median)')
 
-ax[2, 2].errorbar(r_bins, np.log(np.nanmedian(Temp_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_Temp_init_low_mass, ls='-.')
-ax[2, 2].plot(r_bestfit, np.log(np.median(Temp_bestfit[~mask_low_mass], axis=0).value), ls='-.')
+ax[2, 2].errorbar(r_bins, np.log(np.nanmedian(Temp_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_Temp_init_low_mass, c=col1, ls='-.')
+ax[2, 2].plot(r_bestfit, np.log(np.median(Temp_bestfit[~mask_low_mass], axis=0).value), c=col2, ls='-.')
 
 
-ax[2, 3].errorbar(r_bins, np.log(np.nanmedian(Pe_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_Pe_init_low_mass, ls='-.')
-ax[2, 3].plot(r_bestfit, np.log(np.median(Pe_bestfit[~mask_low_mass], axis=0).value), ls='-.')
+ax[2, 3].errorbar(r_bins, np.log(np.nanmedian(Pe_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_Pe_init_low_mass, c=col1, ls='-.')
+ax[2, 3].plot(r_bestfit, np.log(np.median(Pe_bestfit[~mask_low_mass], axis=0).value), c=col2, ls='-.')
 
 
 ax[2, 0].set_xlabel('$r/Rvir$')
 ax[2, 1].set_xlabel('$r/Rvir$')
 ax[2, 2].set_xlabel('$r/Rvir$')
+ax[2, 3].set_xlabel('$r/Rvir$')
 
 ax[2,1].set_title('12<logM<13')
 
-for i in range(4):
-	for j in range(4):
-		ax[i, j].set_ylabel('$\\rho_{DM}$ [GeV/cm$^3$]')
-		ax[i, j].set_ylabel('$\\rho_{gas}$ [GeV/cm$^3$]')
-		ax[i, j].set_ylabel('Temperature [K]')
-		ax[i, j].set_ylabel('$P_e$ [keV/cm$^3$]')
+for i in range(3):
+	ax[i, 0].set_ylabel('$\\rho_{DM}$ [GeV/cm$^3$]')
+	ax[i, 1].set_ylabel('$\\rho_{gas}$ [GeV/cm$^3$]')
+	ax[i, 2].set_ylabel('Temperature [K]')
+	ax[i, 3].set_ylabel('$P_e$ [keV/cm$^3$]')
+
+fig.suptitle('Total $\chi^2_{\mathrm{d.o.f}}=$'+f'${chi2:.2f}$')
+ax[0, 0].set_title('DM Density $\chi^2_{\mathrm{d.o.f}}=$'+f'${chi2_rho_dm:.2f}$')
+ax[0, 1].set_title('Density $\chi^2_{\mathrm{d.o.f}}=$'+f'${chi2_rho:.2f}$')
+ax[0, 2].set_title('Temperature  $\chi^2_{\mathrm{d.o.f}}=$'+f'${chi2_Temp:.2f}$')
+ax[0, 3].set_title('Pressure $\chi^2_{\mathrm{d.o.f}}=$'+f'${chi2_Pe:.2f}$')
 
 plt.savefig(f'{save_path}/best_fit_profiles.pdf')
+
 
 #### Discard 0.9*steps and make triangle plot
 plt.figure()
