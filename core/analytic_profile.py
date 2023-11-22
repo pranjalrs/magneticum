@@ -60,7 +60,9 @@ class Profile():
 		## Choose mass-concentration relation
 		# 0 for Duffy 2008 (used in HMx)
 		# 1 for (Magneticum) Ragagnin 2021
+		# 2 for concentration as free parameter
 		self.imass_conc = 0
+		self.conc_param = None
 
 		## Are you going to run MCMC?
 		## This enables an interpolator for the profile
@@ -463,6 +465,9 @@ class Profile():
 			MSCALE = 19.9e13*0.704*u.Msun/cu.littleh
 			zp = 1/(1 + 0.877)
 			c_M = 1.5* (M/MSCALE)**(-0.04) * ((1+z)/(1+zp))**(-0.52)
+		
+		if self.imass_conc == 2:
+			return self.conc_param
 
 		eps1 = self.eps1_0 + self.eps1_1*z
 		eps2 = self.eps2_0 + self.eps2_1*z
