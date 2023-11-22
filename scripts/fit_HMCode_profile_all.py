@@ -31,7 +31,7 @@ import ipdb
 parser = argparse.ArgumentParser()
 parser.add_argument('--field')
 parser.add_argument('--test', type=bool, default=False)
-parser.add_argument('--run', type=int)
+parser.add_argument('--run', type=str)
 parser.add_argument('--nsteps', type=int)
 args = parser.parse_args()
 test = args.test
@@ -102,7 +102,7 @@ def likelihood(theory_prof, field):
 	num = np.log(sim_prof[~mask_low_mass] / theory_prof.value[~mask_low_mass])**2
 	denom = globals()[f'sigma_intr_{field}_init_low_mass']**2 #+ sigmalnP_sim**2
 	num = ma.array(num, mask=idx, fill_value=0)
-	chi2 = 0.5*np.sum(num/denom)  # Sum over radial bins
+	chi2 += 0.5*np.sum(num/denom)  # Sum over radial bins
 
 	if not np.isfinite(chi2):
 		return -np.inf
@@ -116,11 +116,20 @@ def joint_likelihood(x, mass_list, z=0):
 		if x[i]<lb or x[i]>ub:
 			return -np.inf
 
-	fitter.update_param(fit_par, x)
+
+	fitter_low_mass.update_param(fit_par_unique, np.array(x)[[0, 2, 4, 5, 6, 7]])
+	fitter_high_mass.update_param(fit_par_unique, np.array(x)[[1, 3, 4, 5, 6, 8]])
 
 	mvir = mass_list*u.Msun/cu.littleh
 	## Get profile for each halo
-	(Pe_theory, rho_theory, Temp_theory), r = fitter.get_Pe_profile_interpolated(mvir, r_bins=r_bins, z=z, return_rho=True, return_Temp=True)
+
+	(Pe_theory1, rho_theory1, Temp_theory1), r = fitter_low_mass.get_Pe_profile_interpolated(mvir[~mask_low_mass], r_bins=r_bins, z=z, return_rho=True, return_Temp=True)
+
+	(Pe_theory2, rho_theory2, Temp_theory2), r = fitter_high_mass.get_Pe_profile_interpolated(mvir[mask_low_mass], r_bins=r_bins, z=z, return_rho=True, return_Temp=True)
+
+	Pe_theory = np.concatenate((Pe_theory1, Pe_theory2))
+	rho_theory = np.concatenate((rho_theory1, rho_theory2))
+	Temp_theory = np.concatenate((Temp_theory1, Temp_theory2))
 
 	loglike = 0
 
@@ -139,7 +148,9 @@ def joint_likelihood(x, mass_list, z=0):
 
 bounds = {'f_H': [0.65, 0.85],
 		'gamma': [1.1, 5],
+		'gamma2': [1.1, 5],
 		'alpha': [0.1, 2],
+		'alpha2': [0.1, 2],
 		'log10_M0': [10, 17],
 		'M0': [1e10, 1e17],
 		'beta': [0.4, 0.8],
@@ -153,7 +164,9 @@ bounds = {'f_H': [0.65, 0.85],
 
 fid_val = {'f_H': 0.75,
 		'gamma': 1.2,
+		'gamma2': 1.2,
 		'alpha': 1,
+		'alpha2': 1,
 		'log10_M0': 14,
 		'M0': 1e14,
 		'beta': 0.6,
@@ -167,7 +180,10 @@ fid_val = {'f_H': 0.75,
 
 std_dev = {'f_H': 0.2,
 		'gamma': 0.2,
+		'gamma2': 0.2,
+		'a': 0.1,
 		'alpha': 0.5,
+		'alpha2': 0.5,
 		'log10_M0': 2,
 		'M0': 1e12,
 		'beta': 0.2,
@@ -300,10 +316,13 @@ sigma_intr_Temp_init_low_mass[-1] = 0.1
 
 print('Finished processing simulation data...')
 #####-------------- Prepare for MCMC --------------#####
-fitter = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=Mvir_sim.max()+1e10)
+fitter_low_mass = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=1e13+1e10)
+fitter_high_mass = Profile(use_interp=True, mmin=1e13-1e10, mmax=Mvir_sim.max()+1e10)
+
 print('Initialized profile fitter ...')
-fit_par = ['gamma', 'alpha', 'log10_M0', 'eps1_0', 'eps2_0', 'gamma_T_1', 'gamma_T_2']
-par_latex_names = ['\Gamma', '\\alpha', '\log_{10}M_0', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}^1', '\Gamma_\mathrm{T}^2']
+fit_par_unique = ['gamma', 'alpha', 'log10_M0', 'eps1_0', 'eps2_0', 'gamma_T']
+fit_par = ['gamma', 'gamma2', 'alpha', 'alpha2', 'log10_M0', 'eps1_0', 'eps2_0', 'gamma_T_1', 'gamma_T_2']
+par_latex_names = ['\Gamma', '\Gamma2', '\\alpha', '\\alpha_2', '\log_{10}M_0', '\epsilon_1', '\epsilon_2', '\Gamma_\mathrm{T}^1', '\Gamma_\mathrm{T}^2']
 
 starting_point = [fid_val[k] for k in fit_par]
 std = [std_dev[k] for k in fit_par]
@@ -323,24 +342,39 @@ for i, key in enumerate(fit_par):
 
 print(f'Finished initializing {nwalkers} walkers...')
 
+
 field = args.field.strip('"').split(',')
 print(f'Using Likelihood for {field} field(s)')
 
 
-#####-------------- RUN MCMC --------------#####
-print('Running MCMC..')
+def test_interpolator(walkers):
+	test_interp_low_mass = Profile(use_interp=True, mmin=Mvir_sim.min()-1e10, mmax=1e13+1e10, interp_error_tol = 0.05)
+	test_interp_high_mass = Profile(use_interp=True, mmin=1e13-1e10, mmax=Mvir_sim.max()+1e10, interp_error_tol = 0.05)
 
+	for row in p0_walkers:
+		test_interp_low_mass.update_param(fit_par_unique, np.array(row)[[0, 2, 4, 5, 6, 7]])
+		test_interp_high_mass.update_param(fit_par_unique, np.array(row)[[1, 3, 4, 5, 6, 8]])
+
+		test_interp_low_mass._test_prof_interpolator()
+		test_interp_high_mass._test_prof_interpolator()
+
+#####-------------- RUN MCMC --------------#####
 if test is False:
 	with MPIPool() as pool:
 		if not pool.is_master():
 			pool.wait()
 			sys.exit(0)
-		
+		print('Testing interpolator...')
+		test_interpolator(p0_walkers)
+
 		print('Running MCMC with MPI...')
 		sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, pool=pool, args=[Mvir_sim])
 		sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
 
 else:
+	print('Testing interpolator...')
+	test_interpolator(p0_walkers)
+
 	print('Running MCMC...')
 	sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, args=[Mvir_sim])
 	sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=True)
@@ -360,8 +394,6 @@ log_prob_samples = sampler.get_log_prob(flat=True)
 all_samples = np.concatenate((chain, log_prob_samples[:, None]), axis=1)
 np.savetxt(f'{save_path}/all_samples.txt', all_samples)
 
-#sigma_data = np.column_stack((sigma_intr_Pe_init, sigma_intr_Pe, sigma_intr_rho_init, sigma_intr_rho))
-#np.savetxt(f'{save_path}/sigma_intr.txt',  sigma_data, header='initial Pe \t final \t initial rho \t final')
 
 
 fig, ax = plt.subplots(len(fit_par), 1, figsize=(10, 1.5*len(fit_par)))
@@ -374,20 +406,36 @@ for i in range(len(fit_par)):
 
 plt.savefig(f'{save_path}/trace_plot.pdf')
 
-#### Discard 0.9*steps and make triangle plot
-plt.figure()
-
 gd_samples = getdist.MCSamples(samples=sampler.get_chain(flat=True, discard=int(0.9*nsteps)), names=fit_par, labels=par_latex_names)
-g = plots.get_subplot_plotter()
-g.triangle_plot(gd_samples, axis_marker_lw=2, marker_args={'lw':2}, line_args={'lw':1}, title_limit=2)
-plt.savefig(f'{save_path}/triangle_plot.pdf')
+
+########## Temp ##########
+
+# walkers = np.load(f'{save_path}/all_walkers.npy')
+
+# shape = walkers.shape
+# n_burn = int(shape[0]*0.9)
+# n_sample = int(shape[1]*(shape[0]-n_burn))
+
+# samples = walkers[n_burn:, :, :].reshape(n_sample, shape[2])
+# gd_samples = getdist.MCSamples(samples=samples, names=fit_par, labels=par_latex_names)
 
 ########## Compare best-fit profiles ##########
 c = ['r', 'b', 'g', 'k']
 
 # Fiducial HMCode profiles
-fitter.update_param(fit_par, gd_samples.getMeans())
-(Pe_bestfit, rho_bestfit, Temp_bestfit), r_bestfit = fitter.get_Pe_profile_interpolated(Mvir_sim*u.Msun/cu.littleh, z=0, return_rho=True, return_Temp=True)
+fitter_low_mass.update_param(fit_par_unique, np.array(gd_samples.getMeans())[[0, 2, 4, 5, 6, 7]])
+fitter_high_mass.update_param(fit_par_unique, np.array(gd_samples.getMeans())[[1, 3, 4, 5, 6, 8]])
+
+mvir = Mvir_sim*u.Msun/cu.littleh
+## Get profile for each halo
+
+(Pe_theory1, rho_theory1, Temp_theory1), r_bestfit = fitter_low_mass.get_Pe_profile_interpolated(mvir[~mask_low_mass], r_bins=r_bins, z=0, return_rho=True, return_Temp=True)
+
+(Pe_theory2, rho_theory2, Temp_theory2), r_bestfit = fitter_high_mass.get_Pe_profile_interpolated(mvir[mask_low_mass], r_bins=r_bins, z=0, return_rho=True, return_Temp=True)
+
+Pe_bestfit = np.concatenate((Pe_theory1, Pe_theory2))
+rho_bestfit = np.concatenate((rho_theory1, rho_theory2))
+Temp_bestfit = np.concatenate((Temp_theory1, Temp_theory2))
 
 
 ## Plot median Pe profiles
@@ -433,15 +481,15 @@ ax[1, 2].set_ylabel('$P_e$ [keV/cm$^3$]')
 ax[1,1].set_title('13<logM<15')
 
 ### -------------------------- Low mass halos -------------------------####
-ax[1, 0].errorbar(r_bins, np.log(np.nanmedian(rho_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_rho_init_low_mass, ls='-.', label='Magneticum (median)')
-ax[1, 0].plot(r_bestfit, np.log(np.median(rho_bestfit[~mask_low_mass], axis=0).value), ls='-.', label='Best fit (median)')
+ax[2, 0].errorbar(r_bins, np.log(np.nanmedian(rho_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_rho_init_low_mass, ls='-.', label='Magneticum (median)')
+ax[2, 0].plot(r_bestfit, np.log(np.median(rho_bestfit[~mask_low_mass], axis=0).value), ls='-.', label='Best fit (median)')
 
-ax[1, 1].errorbar(r_bins, np.log(np.nanmedian(Temp_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_Temp_init_low_mass, ls='-.')
-ax[1, 1].plot(r_bestfit, np.log(np.median(Temp_bestfit[~mask_low_mass], axis=0).value), ls='-.')
+ax[2, 1].errorbar(r_bins, np.log(np.nanmedian(Temp_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_Temp_init_low_mass, ls='-.')
+ax[2, 1].plot(r_bestfit, np.log(np.median(Temp_bestfit[~mask_low_mass], axis=0).value), ls='-.')
 
 
-ax[1, 2].errorbar(r_bins, np.log(np.nanmedian(Pe_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_Pe_init_low_mass, ls='-.')
-ax[1, 2].plot(r_bestfit, np.log(np.median(Pe_bestfit[~mask_low_mass], axis=0).value), ls='-.')
+ax[2, 2].errorbar(r_bins, np.log(np.nanmedian(Pe_sim[~mask_low_mass], axis=0)), yerr=sigma_intr_Pe_init_low_mass, ls='-.')
+ax[2, 2].plot(r_bestfit, np.log(np.median(Pe_bestfit[~mask_low_mass], axis=0).value), ls='-.')
 
 
 ax[2, 0].set_ylabel('$\\rho_{gas}$ [GeV/cm$^3$]')
@@ -455,3 +503,10 @@ ax[2, 2].set_xlabel('$r/Rvir$')
 ax[2,1].set_title('12<logM<13')
 
 plt.savefig(f'{save_path}/best_fit_profiles.pdf')
+
+#### Discard 0.9*steps and make triangle plot
+plt.figure()
+
+g = plots.get_subplot_plotter()
+g.triangle_plot(gd_samples, axis_marker_lw=2, marker_args={'lw':2}, line_args={'lw':1}, title_limit=2)
+plt.savefig(f'{save_path}/triangle_plot.pdf')
