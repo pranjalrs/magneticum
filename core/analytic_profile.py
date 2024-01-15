@@ -63,7 +63,7 @@ class Profile():
 		# 2 for concentration as free parameter
 		self.imass_conc = 0
 		self.conc_param = None
-
+		self.norm_rho = None
 		## Are you going to run MCMC?
 		## This enables an interpolator for the profile
 		self.use_interp = False  # set to True for computing profiles using interpolation
@@ -203,7 +203,7 @@ class Profile():
 
 		norm = 4*np.pi*rs**3 * (np.log(1 + c_M) - c_M/(1+c_M))
 
-		rho_cdm = rho_cdm*Mcdm/norm
+		rho_cdm = rho_cdm*self.norm_rho   #Mcdm/norm
 		return (rho_cdm).to(u.g/u.cm**3, cu.with_H0(self.H0)).to(u.GeV/u.cm**3, u.mass_energy()), r_bins
 
 
