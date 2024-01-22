@@ -66,7 +66,7 @@ def get_CLASS_Pk(k_sim, input_dict=None, binned=False, z=0.0):
 
 	return Pnl, kvec
 
-def get_pyHMCode_Pk(set_cosmo=None, z=[0.], fields=None, **kwargs):
+def get_pyHMCode_Pk(set_cosmo=None, z=[0.], fields=None, return_halo_terms=False, **kwargs):
 	# Cosmological parameters
 	cosmo_dict = {'h': 0.704,
 				'omb': 0.0456,
@@ -149,11 +149,15 @@ def get_pyHMCode_Pk(set_cosmo=None, z=[0.], fields=None, **kwargs):
 
 	if fields is None:
 		fields = [pyhmcode.field_electron_pressure]
-	Pk_hm = pyhmcode.calculate_nonlinear_power_spectrum(c, hmod, fields, verbose=False, return_halo_terms=False)
 
-	Pk_hm = np.array(Pk_hm)
-	
-	return Pk_hm, ks
+	if return_halo_terms is False:
+		Pk_hm = pyhmcode.calculate_nonlinear_power_spectrum(c, hmod, fields, verbose=False, return_halo_terms=False)
+		return Pk_hm, ks
+
+	elif return_halo_terms is True:
+		Pk_hm, Pk_hm_1halo, Pk_hm_2halo = pyhmcode.calculate_nonlinear_power_spectrum(c, hmod, fields, verbose=False, return_halo_terms=True)
+		return Pk_hm, Pk_hm_1halo, Pk_hm_2halo, ks
+
 
 def get_suppresion_hmcode(input_cosmo=None, zs=[0.], T_AGNs=None):
 	'''Matter power supression based on hmcode-the full Python
