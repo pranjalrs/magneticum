@@ -64,6 +64,7 @@ class Profile():
 		self.imass_conc = 0
 		self.conc_param = 8
 
+		self.lognorm_rho = -2
 		## Are you going to run MCMC?
 		## This enables an interpolator for the profile
 		self.use_interp = False  # set to True for computing profiles using interpolation
@@ -201,9 +202,9 @@ class Profile():
 		r = r_bins*r_virial
 		rho_cdm = 1/((r/rs)*(1 + r/rs)**2)  # NFW profile
 
-		norm = 4*np.pi*rs**3 * (np.log(1 + c_M) - c_M/(1+c_M))
-
-		rho_cdm = rho_cdm*Mcdm/norm
+#		norm = 4*np.pi*rs**3 * (np.log(1 + c_M) - c_M/(1+c_M))
+		norm = 10**self.lognorm_rho*1e-26 #* 1e3
+		rho_cdm = rho_cdm * norm * u.g/u.cm**3  #Mcdm/norm
 		return (rho_cdm).to(u.g/u.cm**3, cu.with_H0(self.H0)).to(u.GeV/u.cm**3, u.mass_energy()), r_bins
 
 
