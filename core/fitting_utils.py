@@ -31,7 +31,7 @@ def update_sigma_intr(val1, val2):
 	sigma_intr_rho = val2
 
 
-def get_halo_data(halo, field, r_bins, return_sigma=False):
+def get_halo_data(halo, field, r_bins, return_sigma=False, remove_outlier=True):
 	if field=='rho_dm':
 		r = halo['fields']['cdm'][1]/halo['rvir']
 		profile = halo['fields']['cdm'][0]
@@ -73,7 +73,7 @@ def get_halo_data(halo, field, r_bins, return_sigma=False):
 			return None, None, None
 		return None, None
 
-	elif np.any(profile_interp[:10]<0.9*profile_interp[-1]):
+	elif np.any(profile_interp[:10]<0.9*profile_interp[-1]) and remove_outlier is True:
 		if return_sigma is True:
 			return None, None, None
 		return None, None
