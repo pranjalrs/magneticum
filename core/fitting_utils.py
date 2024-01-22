@@ -124,3 +124,19 @@ def joint_likelihood(x, field, fitter, params, bounds, halo_mass, z, r_bins):
 		loglike += likelihood(Temp_theory, 'Temp')
 
 	return loglike
+
+def nan_interp(x, y):
+	idx = ((np.isnan(y)) | (y==0))
+	return interp1d(x[~idx], y[~idx], kind='cubic', bounds_error=False, fill_value=0)
+
+def get_scatter(x, xbar):
+	# Calculate for radial bin at a time
+	std  = []
+	for i in range(x.shape[1]):
+		this_column = x[:, i]
+		idx = (this_column>0) & (np.isfinite(this_column))
+		this_column = this_column[idx]
+#         std.append(np.mean((this_column-xbar[i])**2)**0.5)
+		std.append((np.percentile(this_column-xbar[i], 84, axis=0) - np.percentile(this_column-xbar[i], 16, axis=0))/2)
+
+	return np.array(std)
