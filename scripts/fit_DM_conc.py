@@ -80,7 +80,7 @@ def joint_likelihood(x, mass, r_bins, z=0):
 	return loglike
 
 bounds = {'lognorm_rho': [-4., 10.],
-			'conc_param': [0, 12]}
+			'conc_param': [0, 20]}
 
 fid_val = {'lognorm_rho': -2.5,
 			'conc_param': 2}
@@ -173,33 +173,36 @@ fit_result = []
 
 fig = plt.figure()
 
+
 for i in tqdm(range(sum(mask))):
-	this_rho_dm_sim = rho_dm_sim[i]
+	this_rho_dm_sim = rho_dm_sim[i] # Don't change variable names; called in likelihood using `globals()`
 	this_halo_mass = Mvir_sim[i]
 	this_sigma_lnrho_dm = sigma_lnrho_dm[i]
 	this_r_bins = r_bins_sim[i]
 
-	sol = scipy.optimize.least_squares(joint_likelihood, starting_point, bounds=np.array(these_bounds).T, args=(this_halo_mass, this_r_bins),
-										max_nfev=1000, x_scale=std, xtol=None, gtol=None)
+	# sol_minimize = scipy.optimize.least_squares(joint_likelihood, sol.x, bounds=np.array(these_bounds).T, args=(this_halo_mass, this_r_bins), xtol=1e-12)
+	# minimizer_kwargs = {"method": "L-BFGS-B", "bounds": np.array(these_bounds), "args": (this_halo_mass, this_r_bins)}
+	# sol = scipy.optimize.basinhopping(joint_likelihood, starting_point, niter=100, minimizer_kwargs=minimizer_kwargs)
+	sol = scipy.optimize.differential_evolution(joint_likelihood, bounds=np.array(these_bounds), x0=starting_point, args=(this_halo_mass, this_r_bins))
 
-	fit_result.append([this_halo_mass, sol.x[0], sol.cost])
-	
+
+	fit_result.append([this_halo_mass, sol.x[0], sol.x[1], sol.fun])
+
 	fitter.update_param(fit_par, sol.x)
 	rho_dm_theory, r = fitter.get_rho_dm_profile(this_halo_mass*u.Msun/cu.littleh, r_bins=this_r_bins, z=0)
-	plt.plot(r, this_rho_dm_sim/rho_dm_theory.value-1, c='dodgerblue', alpha=0.2);
 
+	plt.semilogx(r, this_rho_dm_sim/rho_dm_theory.value, c='dodgerblue', alpha=0.4)
+	# plt.loglog(r, this_rho_dm_sim, c='dodgerblue', alpha=0.2)
+	# plt.loglog(r, rho_dm_theory.value, c='orangered', alpha=0.2)
+	# plt.show()
 
-# plt.plot(r_bins, sigma_intr_rho_dm, c='k', ls=':', label='$\sigma_{int}$')
-# plt.plot(r_bins, -sigma_intr_rho_dm, c='k', ls=':')
 plt.savefig('test_residual.pdf')
 plt.close()
 
 result = np.vstack(fit_result)
-# result[:, 2][result[:, 2]>50] = 50
-
 
 plt.figure()
-plt.scatter(result[:,0], result[:, 1], c=result[:, 2], alpha=0.5)
+plt.scatter(result[:,0], result[:, 1], c=result[:, -1], alpha=0.5)
 plt.colorbar()
 plt.ylabel('Concentration')
 plt.xlabel('Virial Mass [Msun]')
@@ -208,9 +211,11 @@ plt.savefig(f'test_conc_{mmin}_{mmax}.pdf')
 plt.close()
 
 plt.figure()
-plt.scatter(result[:,0], result[:, 2], c='dodgerblue', alpha=0.2)
+plt.scatter(result[:,0], result[:, -1], c='dodgerblue', alpha=0.2)
 plt.ylabel('Cost Fn.')
 plt.xlabel('Virial Mass [Msun]')
 plt.xscale('log')
 plt.savefig(f'test_cost_{mmin}_{mmax}.pdf')
 plt.close()
+
+joblib.dump(result, f'DM_conc_{mmin}_{mmax}.pkl')
