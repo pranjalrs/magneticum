@@ -32,13 +32,16 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--test', type=bool, default=False)
 parser.add_argument('--run', type=str)
 parser.add_argument('--niter', type=int)
-parser.add_argument('--nsteps', type=int)
+parser.add_argument('--chi2', type=str, choices=['log', 'linear'])
 parser.add_argument('--mmin', type=float)
 parser.add_argument('--mmax', type=float)
 args = parser.parse_args()
+
 test = args.test
+chi2_type = args.chi2
 run, niter = args.run, args.niter
 mmin, mmax = args.mmin, args.mmax
+
 field = ['rho_dm']
 
 #####-------------- Likelihood --------------#####
@@ -46,7 +49,12 @@ def likelihood(theory_prof, field):
 	sim_prof = globals()['this_'+field+'_sim'] # Simulation profile
 	sim_sigma_lnprof = globals()[f'this_sigma_ln{field}']# Measurement uncertainty
 
-	num = np.log(sim_prof / theory_prof.value)**2
+	if chi2_type == 'log':
+		num = np.log(sim_prof / theory_prof.value)**2
+	
+	elif chi2_type == 'linear':
+		num = (sim_prof - theory_prof.value)**2
+
 
 	idx = sim_prof==0
 	num = ma.array(num, mask=idx, fill_value=0)
@@ -168,7 +176,7 @@ print(f'Using Likelihood for {field} field(s)')
 
 
 #####-------------- RUN MCMC --------------#####
-
+base_path = '../../magneticum-data/data/DM_conc'
 fit_result = []
 
 fig = plt.figure()
@@ -191,12 +199,14 @@ for i in tqdm(range(sum(mask))):
 	fitter.update_param(fit_par, sol.x)
 	rho_dm_theory, r = fitter.get_rho_dm_profile(this_halo_mass*u.Msun/cu.littleh, r_bins=this_r_bins, z=0)
 
-	plt.semilogx(r, this_rho_dm_sim/rho_dm_theory.value, c='dodgerblue', alpha=0.4)
-	# plt.loglog(r, this_rho_dm_sim, c='dodgerblue', alpha=0.2)
-	# plt.loglog(r, rho_dm_theory.value, c='orangered', alpha=0.2)
-	# plt.show()
+	# plt.semilogx(r, this_rho_dm_sim/rho_dm_theory.value, c='dodgerblue', alpha=0.4)
 
-plt.savefig('test_residual.pdf')
+	plt.loglog(r, this_rho_dm_sim, c='dodgerblue', alpha=0.2)
+	plt.loglog(r, rho_dm_theory.value, c='orangered', alpha=0.2)
+	plt.show()
+	t
+
+plt.savefig(f'{base_path}/DM_prof_residual_{chi2_type}.pdf')
 plt.close()
 
 result = np.vstack(fit_result)
@@ -207,7 +217,7 @@ plt.colorbar()
 plt.ylabel('Concentration')
 plt.xlabel('Virial Mass [Msun]')
 plt.xscale('log')
-plt.savefig(f'test_conc_{mmin}_{mmax}.pdf')
+plt.savefig(f'{base_path}/conc_{mmin}_{mmax}_{chi2_type}.pdf')
 plt.close()
 
 plt.figure()
@@ -215,7 +225,7 @@ plt.scatter(result[:,0], result[:, -1], c='dodgerblue', alpha=0.2)
 plt.ylabel('Cost Fn.')
 plt.xlabel('Virial Mass [Msun]')
 plt.xscale('log')
-plt.savefig(f'test_cost_{mmin}_{mmax}.pdf')
+plt.savefig(f'{base_path}/chi2_{mmin}_{mmax}_{chi2_type}.pdf')
 plt.close()
 
-joblib.dump(result, f'DM_conc_{mmin}_{mmax}.pkl')
+joblib.dump(result, f'DM_conc_{mmin}_{mmax}_{chi2_type}.pkl')
