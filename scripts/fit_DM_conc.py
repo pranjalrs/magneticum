@@ -199,12 +199,11 @@ for i in tqdm(range(sum(mask))):
 	fitter.update_param(fit_par, sol.x)
 	rho_dm_theory, r = fitter.get_rho_dm_profile(this_halo_mass*u.Msun/cu.littleh, r_bins=this_r_bins, z=0)
 
-	# plt.semilogx(r, this_rho_dm_sim/rho_dm_theory.value, c='dodgerblue', alpha=0.4)
+	plt.semilogx(r, this_rho_dm_sim/rho_dm_theory.value, c='dodgerblue', alpha=0.4)
 
-	plt.loglog(r, this_rho_dm_sim, c='dodgerblue', alpha=0.2)
-	plt.loglog(r, rho_dm_theory.value, c='orangered', alpha=0.2)
-	plt.show()
-	t
+	#plt.loglog(r, this_rho_dm_sim, c='dodgerblue', alpha=0.2)
+	#plt.loglog(r, rho_dm_theory.value, c='orangered', alpha=0.2)
+	#plt.show()
 
 plt.savefig(f'{base_path}/DM_prof_residual_{chi2_type}.pdf')
 plt.close()
@@ -228,4 +227,4 @@ plt.xscale('log')
 plt.savefig(f'{base_path}/chi2_{mmin}_{mmax}_{chi2_type}.pdf')
 plt.close()
 
-joblib.dump(result, f'DM_conc_{mmin}_{mmax}_{chi2_type}.pkl')
+joblib.dump(result, f'{base_path}/DM_conc_{mmin}_{mmax}_{chi2_type}.pkl')
