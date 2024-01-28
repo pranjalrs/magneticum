@@ -171,11 +171,11 @@ def get_field_for_halo(particle_data, mask, z, little_h, field, r1=None, r2=None
 	if field == 'v_disp':
 		mass = particle_data[0]['MASS'][mask[0]]
 		velocity = particle_data[0]['VEL '][mask[0]]*Gadget.units.velocity  # v_comoving / sqrt(1+z)
-		velocity_comoving = (velocity/(1+z)**0.5).to(u.km/u.s)
+
+		velocity_comoving = (velocity/(1+z)**0.5).to(u.km/u.s).value
 		v_dispersion = 1/3*mass*(velocity[:, 0]**2 + velocity[:, 1]**2 + velocity[:, 2]**2)/np.sum(mass)
 
 		return v_dispersion
-
 
 	if field == "Temp":
 		Temp = particle_data[0]['TEMP'][mask[0]]*Gadget.units.Temperature
@@ -307,7 +307,7 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 
 			elif estimator == 'sum':
 				profile[bin_index] = np.sum(this_bin_field)
-			
+
 			try:
 				sigma_prof[bin_index] = sigma_percentile(this_bin_field)/n_part**0.5
 				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))/n_part**0.5
