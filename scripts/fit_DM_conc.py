@@ -152,7 +152,7 @@ sigma_lnrho_dm = np.vstack(sigma_lnrho_dm)[sorting_indices]#[:, idx]
 rho_dm_sim = rho_dm_sim[mask]
 sigma_lnrho_dm = sigma_lnrho_dm[mask]
 Mvir_sim = Mvir_sim[mask]
-
+r_bins_sim = r_bins_sim[mask]
 # rho_dm_rescale = np.vstack(rho_dm_rescale)[sorting_indices][:, idx]
 # median_prof = np.median(rho_dm_rescale[mask], axis=0)
 # sigma_intr_rho_dm = get_scatter(np.log(rho_dm_rescale[mask]), np.log(median_prof))
