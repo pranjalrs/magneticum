@@ -171,8 +171,10 @@ def get_field_for_halo(particle_data, mask, z, little_h, field, r1=None, r2=None
 	if field == 'v_disp':
 		mass = particle_data[0]['MASS'][mask[0]]
 		velocity = particle_data[0]['VEL '][mask[0]]*Gadget.units.velocity  # v_comoving / sqrt(1+z)
-		velocity_comoving = (velocity/(1+z)**0.5).to(u.km/u.s).value
+		velocity_comoving = (velocity/(1+z)**0.5).to(u.km/u.s)
 		v_dispersion = 1/3*mass*(velocity[:, 0]**2 + velocity[:, 1]**2 + velocity[:, 2]**2)/np.sum(mass)
+
+		return v_dispersion
 
 
 	if field == "Temp":
@@ -226,22 +228,17 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, z, little_
 	if not isinstance(fields, list): fields = [fields]
 	_assert_correct_field(fields)
 
+	ptype = [0]
+	if 'matter' in fields:
+		ptype = [0, 1, 4]
+
+	elif 'cdm' in fields:
+		ptype = [1]
+
 	try:
-		if 'matter' in fields:
-			ptype = [0, 1, 4]
+		particle_data = g3read.read_particles_in_box(snap_base, halo_center, 2*halo_radius, ['POS ', 'TEMP', 'MASS', 'VEL ', 'RHO ', 'Zs  '], ptype, use_super_indexes=True)
 
-		elif 'cdm' in fields:
-			ptype = [1]
-
-		elif 'gas' in fields:
-			pytpe = [0]
-
-		else:
-			ptype = [0]
-
-		particle_data = g3read.read_particles_in_box(snap_base, halo_center, 3*halo_radius, ['POS ', 'TEMP', 'MASS', 'RHO ', 'Zs  '], ptype, use_super_indexes=True)
-
-	except:
+	except FileNotFoundError:
 		print(f'Snapshot directory {snap_base} not found!')
 		sys.exit(1)
 
@@ -465,7 +462,7 @@ def get_cosmology_dict_from_path(path):
 
 def _assert_correct_field(fields):
 	for f in fields:
-		assert f in ['Pe', 'Temp', 'matter', 'cdm', 'gas', 'Pe_Mead'], f'Field *{f}* is unknown!'
+		assert f in ['Pe', 'Temp', 'matter', 'cdm', 'gas', 'Pe_Mead', 'v_disp'], f'Field *{f}* is unknown!'
 
 
 def set_storage_path():
