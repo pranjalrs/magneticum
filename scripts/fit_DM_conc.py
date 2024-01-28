@@ -205,7 +205,7 @@ for i in tqdm(range(sum(mask))):
 	#plt.loglog(r, rho_dm_theory.value, c='orangered', alpha=0.2)
 	#plt.show()
 
-plt.savefig(f'{base_path}/DM_prof_residual_{chi2_type}.pdf')
+plt.savefig(f'{base_path}/DM_prof_residual_{mmin}_{mmax}_{chi2_type}.pdf')
 plt.close()
 
 result = np.vstack(fit_result)
