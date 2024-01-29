@@ -138,25 +138,20 @@ Mvir_sim = np.array(Mvir_sim, dtype='float32')
 sorting_indices = np.argsort(Mvir_sim)
 Mvir_sim = Mvir_sim[sorting_indices]
 
-mask = (Mvir_sim>=10**(mmin)) & (Mvir_sim<10**mmax)
-print(f'{np.log10(Mvir_sim[mask].min()):.2f}, {np.log10(Mvir_sim[mask].max()):.2f}')
 
-# # This is where we select which part of the profile (inner/outer) we want to fit for.
-# idx = np.arange(10)
-# r_bins = r_bins[idx]
 
 
 rho_dm_sim = np.array(rho_dm_sim, dtype='float32')[sorting_indices]#[:, idx]
 sigma_lnrho_dm = np.vstack(sigma_lnrho_dm)[sorting_indices]#[:, idx]
+r_bins_sim = np.vstack(r_bins_sim)[sorting_indices]
+
+mask = (Mvir_sim>=10**(mmin)) & (Mvir_sim<10**mmax)
+print(f'{np.log10(Mvir_sim[mask].min()):.2f}, {np.log10(Mvir_sim[mask].max()):.2f}')
 
 rho_dm_sim = rho_dm_sim[mask]
 sigma_lnrho_dm = sigma_lnrho_dm[mask]
 Mvir_sim = Mvir_sim[mask]
 r_bins_sim = r_bins_sim[mask]
-# rho_dm_rescale = np.vstack(rho_dm_rescale)[sorting_indices][:, idx]
-# median_prof = np.median(rho_dm_rescale[mask], axis=0)
-# sigma_intr_rho_dm = get_scatter(np.log(rho_dm_rescale[mask]), np.log(median_prof))
-# sigma_intr_rho_dm[-1] = 0.1
 
 print('Finished processing simulation data...')
 print(f'Using {np.sum(mask)} halos for fit...')
@@ -183,10 +178,14 @@ fig = plt.figure()
 
 
 for i in tqdm(range(sum(mask))):
-	this_rho_dm_sim = rho_dm_sim[i] # Don't change variable names; called in likelihood using `globals()`
-	this_halo_mass = Mvir_sim[i]
-	this_sigma_lnrho_dm = sigma_lnrho_dm[i]
 	this_r_bins = r_bins_sim[i]
+	idx = this_r_bins<=1.
+	
+	this_r_bins = this_r_bins[idx]
+	this_rho_dm_sim = rho_dm_sim[i][idx] # Don't change variable names; called in likelihood using `globals()`
+	this_halo_mass = Mvir_sim[i]
+	this_sigma_lnrho_dm = sigma_lnrho_dm[i][idx]
+	
 
 	# sol_minimize = scipy.optimize.least_squares(joint_likelihood, sol.x, bounds=np.array(these_bounds).T, args=(this_halo_mass, this_r_bins), xtol=1e-12)
 	# minimizer_kwargs = {"method": "L-BFGS-B", "bounds": np.array(these_bounds), "args": (this_halo_mass, this_r_bins)}
@@ -200,7 +199,6 @@ for i in tqdm(range(sum(mask))):
 	rho_dm_theory, r = fitter.get_rho_dm_profile(this_halo_mass*u.Msun/cu.littleh, r_bins=this_r_bins, z=0)
 
 	plt.semilogx(r, this_rho_dm_sim/rho_dm_theory.value, c='dodgerblue', alpha=0.4)
-
 	#plt.loglog(r, this_rho_dm_sim, c='dodgerblue', alpha=0.2)
 	#plt.loglog(r, rho_dm_theory.value, c='orangered', alpha=0.2)
 	#plt.show()
