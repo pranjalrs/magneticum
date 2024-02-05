@@ -1,5 +1,7 @@
 import glob
 import joblib
+import matplotlib.colors as colors
+import matplotlib.pyplot as plt
 import numpy as np
 import os
 import re
@@ -246,7 +248,7 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, z, little_
 
 	for field in fields:
 		if field in ['Pe_Mead', 'matter', 'gas', 'cdm', 'v_disp']:
-			profile, r, sigma_prof, sigma_lnprof = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator='sum')
+			profile, r, npart = _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator='sum')
 
 		else:
 			profile, r, npart = _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator)
@@ -339,66 +341,78 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 
 
 def _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator):
-	rmin, rmax = 0.1*halo_radius, 2*halo_radius
-	bins = np.logspace(np.log10(rmin), np.log10(rmax), 17)  # Radial bin edges
+	rmin, rmax = 0.1*halo_radius, 1*halo_radius
+	bins = np.logspace(-1.5, 0, 20)*halo_radius  # Radial bin edges
+	#bins = np.logspace(-1.5, 0, 20)  # Radial bin edges
 
 	## g3read.to_spherical returns an array of [r, theta, phi]
 	part_distance_from_center = {}
-
+	mask = {}
 	for this_ptype in ptype:
 		if particle_data[this_ptype]['POS '] is not None:
-			part_distance_from_center[this_ptype] = g3read.to_spherical(particle_data[this_ptype]['POS '], halo_center).T[0]
+			distance = g3read.to_spherical(particle_data[this_ptype]['POS '], halo_center).T[0]
+			part_distance_from_center[this_ptype] = distance
+			mask[this_ptype] = distance < rmax
 		else:
 			#part_distance_from_center[this_ptype] = []
 			ptype.remove(this_ptype)
 
-	## Create mask for particle outside rmax
-	mask = part_distance_from_center[1] < rmax
-	field_data = _get_field_for_halo2(particle_data, field)
+	## Create mask for particle outside rmax	
 
 	## Make histograms
-	x = part_distance_from_center[this_ptype]
+	x = part_distance_from_center[this_ptype][mask[1]]/halo_radius
 	part_per_bin = np.histogram(x, bins=bins, density=False)[0]
 	bin_pos_sum = np.histogram(x, weights=x, bins=bins, density=False)[0]
 	bin_centers = bin_pos_sum/part_per_bin
-
-	bins_m = np.histogram(x, weights=field_data, bins=bins, density=False)[0]
 	bins_shell = 4./3.*np.pi*(bins[1:]**3 - bins[:-1]**3)
+
+	field_data = _get_field_for_halo2(particle_data, field, mask[1], z, little_h)
+	bins_m = np.histogram(x, weights=field_data, bins=bins, density=False)[0]
 	bin_rho = bins_m / bins_shell
 
-	fig, ax = plt.subplots(2, 2, figsize=(8, 8))
+	fig, ax = plt.subplots(2, 2, figsize=(10, 8))
 
 	for i, this_ptype in enumerate(ptype):
-		x = particle_data[this_ptype]['POS '][:, 0][mask]
-		y = particle_data[this_ptype]['POS '][:, 1][mask]
-		z = particle_data[this_ptype]['POS '][:, 2][mask]
+		x = particle_data[this_ptype]['POS '][:, 0][mask[this_ptype]]/1e3
+		y = particle_data[this_ptype]['POS '][:, 1][mask[this_ptype]]/1e3
+
+		z = particle_data[this_ptype]['POS '][:, 2][mask[this_ptype]]/1e3
+
 
 		## x-y projection
-		ax[0, i].hist2d(x, y, weights =field_data, bins=bins,  norm = colors.LogNorm())
-		ax[0, i].axvline(halo_center[0], c='r')
-		ax[0, i].axhline(halo_center[1], c='r')
-		circle = plt.Circle((halo_center[0], halo_center[1]), halo_radius, color='r', fill=False)
-		ax[0, i].add_patch(circle)
-		ax[0, i].set_aspect('equal')
+		ax[i, 0].hist2d(x, y, weights=field_data, bins=100,  norm = colors.LogNorm())
+		circle = plt.Circle((halo_center[0]/1e3, halo_center[1]/1e3), halo_radius/1e3, ls='--', color='w', fill=False)
+		ax[i, 0].add_patch(circle)
+		ax[i, 0].scatter(halo_center[0]/1e3, halo_center[1]/1e3, marker='x', c='r')
+#		ax[i, 0].axvline(halo_center[0]/1e3, c='r')
+#		ax[i, 0].axhline(halo_center[1]/1e3, c='r')
+		ax[i, 0].set_xlim(halo_center[0]/1e3-5., halo_center[0]/1e3+5.)
+		ax[i, 0].set_ylim(halo_center[1]/1e3-5., halo_center[1]/1e3+5.)
+
+		ax[i, 0].set(xlabel='X [cMpc/h]', ylabel='Y [cMpc/h]')
+		ax[i, 0].set_aspect('equal')
 
 		## x-z projection
-		ax[0, i+1].hist2d(x, z, weights =field_data, bins=bins,  norm = colors.LogNorm())
-		ax[0, i+1].axvline(halo_center[0], c='r')
-		ax[0, i+1].axhline(halo_center[2], c='r')
-		circle = plt.Circle((halo_center[0], halo_center[2]), halo_radius, color='r', fill=False)
-		ax[0, i+1].add_patch(circle)
-		ax[0, i+1].set_aspect('equal')
+		ax[i, 1].hist2d(x, z, weights=field_data, bins=100,  norm = colors.LogNorm())
+		circle = plt.Circle((halo_center[0]/1e3, halo_center[2]/1e3), halo_radius/1e3, ls='--', color='w', fill=False)
+		ax[i, 1].add_patch(circle)
+		ax[i, 1].scatter(halo_center[0]/1e3, halo_center[2]/1e3, marker='x', c='r')
+#		ax[i, 1].axvline(halo_center[0]/1e3, c='r')
+#		ax[i, 1].axhline(halo_center[2]/1e3, c='r')
+		ax[i, 1].set_xlim(halo_center[0]/1e3-5., halo_center[0]/1e3+5.)
+		ax[i, 1].set_ylim(halo_center[2]/1e3-5., halo_center[2]/1e3+5.)
+		ax[i, 1].set_aspect('equal')
+		ax[i, 1].set(xlabel='X [cMpc/h]', ylabel='Z [cMpc/h]')
 
 	plt.savefig('test.pdf', bbox_inches='tight')
 
 	return bin_rho, bin_centers, part_per_bin
 
-def _get_field_for_halo2(particle_data, field):
+def _get_field_for_halo2(particle_data, field, mask, z, little_h):
 
 	if field == 'cdm':
-		mass = particle_data[1]['MASS'][mask[1]]*Gadget.units.mass*Gadget.convert.density_to_physical(z, little_h)
-		return mass.to(u.GeV/u.cm**3, u.mass_energy())
-
+		mass = particle_data[1]['MASS'][mask]#*Gadget.units.mass*Gadget.convert.density_to_physical(z, little_h)
+		return mass
 
 
 def get_halo_catalog(group_base, blocks=['GPOS', 'MVIR', 'RVIR', 'M5CC', 'R5CC'], mmin=1e12):
