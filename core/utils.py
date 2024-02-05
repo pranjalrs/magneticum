@@ -249,12 +249,11 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, z, little_
 			profile, r, sigma_prof, sigma_lnprof = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator='sum')
 
 		else:
-			profile, r, sigma_prof, sigma_lnprof = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator)
+			profile, r, npart = _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator)
 
 		profiles_dict[field][0] = profile
 		profiles_dict[field][1] = r
-		profiles_dict[field][2] = sigma_prof
-		profiles_dict[field][3] = sigma_lnprof
+		profiles_dict[field][2] = npart
 
 	return profiles_dict
 
@@ -337,6 +336,69 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 
 
 	return  profile, weighted_bin_center, sigma_prof, sigma_lnprof
+
+
+def _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator):
+	rmin, rmax = 0.1*halo_radius, 2*halo_radius
+	bins = np.logspace(np.log10(rmin), np.log10(rmax), 17)  # Radial bin edges
+
+	## g3read.to_spherical returns an array of [r, theta, phi]
+	part_distance_from_center = {}
+
+	for this_ptype in ptype:
+		if particle_data[this_ptype]['POS '] is not None:
+			part_distance_from_center[this_ptype] = g3read.to_spherical(particle_data[this_ptype]['POS '], halo_center).T[0]
+		else:
+			#part_distance_from_center[this_ptype] = []
+			ptype.remove(this_ptype)
+
+	## Create mask for particle outside rmax
+	mask = part_distance_from_center[1] < rmax
+	field_data = _get_field_for_halo2(particle_data, field)
+
+	## Make histograms
+	x = part_distance_from_center[this_ptype]
+	part_per_bin = np.histogram(x, bins=bins, density=False)[0]
+	bin_pos_sum = np.histogram(x, weights=x, bins=bins, density=False)[0]
+	bin_centers = bin_pos_sum/part_per_bin
+
+	bins_m = np.histogram(x, weights=field_data, bins=bins, density=False)[0]
+	bins_shell = 4./3.*np.pi*(bins[1:]**3 - bins[:-1]**3)
+	bin_rho = bins_m / bins_shell
+
+	fig, ax = plt.subplots(2, 2, figsize=(8, 8))
+
+	for i, this_ptype in enumerate(ptype):
+		x = particle_data[this_ptype]['POS '][:, 0][mask]
+		y = particle_data[this_ptype]['POS '][:, 1][mask]
+		z = particle_data[this_ptype]['POS '][:, 2][mask]
+
+		## x-y projection
+		ax[0, i].hist2d(x, y, weights =field_data, bins=bins,  norm = colors.LogNorm())
+		ax[0, i].axvline(halo_center[0], c='r')
+		ax[0, i].axhline(halo_center[1], c='r')
+		circle = plt.Circle((halo_center[0], halo_center[1]), halo_radius, color='r', fill=False)
+		ax[0, i].add_patch(circle)
+		ax[0, i].set_aspect('equal')
+
+		## x-z projection
+		ax[0, i+1].hist2d(x, z, weights =field_data, bins=bins,  norm = colors.LogNorm())
+		ax[0, i+1].axvline(halo_center[0], c='r')
+		ax[0, i+1].axhline(halo_center[2], c='r')
+		circle = plt.Circle((halo_center[0], halo_center[2]), halo_radius, color='r', fill=False)
+		ax[0, i+1].add_patch(circle)
+		ax[0, i+1].set_aspect('equal')
+
+	plt.savefig('test.pdf', bbox_inches='tight')
+
+	return bin_rho, bin_centers, part_per_bin
+
+def _get_field_for_halo2(particle_data, field):
+
+	if field == 'cdm':
+		mass = particle_data[1]['MASS'][mask[1]]*Gadget.units.mass*Gadget.convert.density_to_physical(z, little_h)
+		return mass.to(u.GeV/u.cm**3, u.mass_energy())
+
 
 
 def get_halo_catalog(group_base, blocks=['GPOS', 'MVIR', 'RVIR', 'M5CC', 'R5CC'], mmin=1e12):
