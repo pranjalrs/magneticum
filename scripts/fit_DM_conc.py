@@ -48,22 +48,24 @@ field = ['rho_dm']
 def likelihood(theory_prof, field):
 	sim_prof = globals()['this_'+field+'_sim'] # Simulation profile
 	sim_sigma_lnprof = globals()[f'this_sigma_ln{field}']# Measurement uncertainty
+# 	sim_sigma_prof = globals()[f'this_sigma_{field}']# Measurement uncertainty
 
 	if chi2_type == 'log':
 		num = np.log(sim_prof / theory_prof.value)**2
-	
+		denom = sim_sigma_lnprof**2
+
 	elif chi2_type == 'linear':
 		num = (sim_prof - theory_prof.value)**2
+		denom = sim_sigma_prof**2
 
 
 	idx = sim_prof==0
 	num = ma.array(num, mask=idx, fill_value=0)
 	
-	denom = 1.# sim_sigma_lnprof**2
 	chi2 = 0.5*np.sum(num/denom)  #Sum over radial bins
 
 	if not np.isfinite(chi2):
-		return -np.inf
+		return np.inf
 
 	return chi2
 
@@ -87,23 +89,23 @@ def joint_likelihood(x, mass, r_bins, z=0):
 	loglike = like_rho_dm + like_rho + like_Temp + like_Pe
 	return loglike
 
-bounds = {'lognorm_rho': [-4., 10.],
-			'conc_param': [0, 20]}
+bounds = {'lognorm_rho': [1, 20],
+			'conc_param': [1, 20]}
 
-fid_val = {'lognorm_rho': -2.5,
-			'conc_param': 2}
+fid_val = {'lognorm_rho': 10,
+			'conc_param': 7}
 
-std_dev = {'lognorm_rho': 0.3,
-			'conc_param': 8}
+std_dev = {'lognorm_rho': 0.1,
+			'conc_param': 0.1}
 
 #####-------------- Load Data --------------#####
 #save_path = f'../../magneticum-data/data/emcee_magneticum_cM/prof_{args.field}_halos_bin/{run}'
 #save_path = f'../../magneticum-data/data/emcee_new/prof_{args.field}_halos_bin/{run}'
-save_path = f'../../magneticum-data/data/emcee_concentration/prof_{field}_halos_bin/{run}'
 
-data_path = '../../magneticum-data/data/profiles_median'
-files = glob.glob(f'{data_path}/Box1a/Pe_Pe_Mead_Temp_matter_cdm_gas_v_disp_z=0.00_mvir_1.0E+13_1.0E+16.pkl')
-files += glob.glob(f'{data_path}/Box2/Pe_Pe_Mead_Temp_matter_cdm_gas_v_disp_z=0.00_mvir_1.0E+12_1.0E+13.pkl')
+# data_path = '../../magneticum-data/data/profiles_median'
+# files = glob.glob(f'{data_path}/Box1a/Pe_Pe_Mead_Temp_matter_cdm_gas_v_disp_z=0.00_mvir_1.0E+13_1.0E+16.pkl')
+# files += glob.glob(f'{data_path}/Box2/Pe_Pe_Mead_Temp_matter_cdm_gas_v_disp_z=0.00_mvir_1.0E+12_1.0E+13.pkl')
+files = glob.glob('/home/u31/pranjalrs/*.pkl')
 
 #files = [f'{data_path}/Box1a/Pe_Pe_Mead_Temp_matter_cdm_gas_z=0.00_mvir_1.0E+13_1.0E+15_coarse.pkl']
 #files += [f'{data_path}/Box2/Pe_Pe_Mead_Temp_matter_cdm_gas_z=0.00_mvir_1.0E+12_1.0E+13_coarse.pkl']
@@ -111,39 +113,45 @@ files += glob.glob(f'{data_path}/Box2/Pe_Pe_Mead_Temp_matter_cdm_gas_v_disp_z=0.
 ## We will interpolate all measured profiles to the same r_bins as 
 ## the analytical profile for computational efficiency
 rho_dm_sim= []
+sigma_rho_dm = []
 sigma_lnrho_dm = []
 r_bins_sim = []
 Mvir_sim = []
+Rvir_sim = []
 
+conversion_factor = (1*u.Msun/u.kpc**3).to(u.GeV/u.cm**3, u.mass_energy()).value
 for f in files:
 	this_prof_data = joblib.load(f)
 	for halo in this_prof_data:
 
 		r = halo['fields']['cdm'][1]/halo['rvir']
 		profile = halo['fields']['cdm'][0]
-		sigma_lnprof = halo['fields']['cdm'][3]
+		npart = halo['fields']['cdm'][2]
+		sigma_prof = profile/npart**0.5        
+		sigma_lnprof = sigma_prof/profile
 
 		# These should be after all the if statements
 		rho_dm_sim.append(profile)
 		sigma_lnrho_dm.append(sigma_lnprof)
 		r_bins_sim.append(r)
 
+		Rvir_sim.append(halo['rvir'])
 		Mvir_sim.append(halo['mvir'])
 
 # Since low mass halos have a large scatter we compute it separately for them
 
 # Now we need to sort halos in order of increasing mass
 # Since this is what the scipy interpolator expects
+# sorting_indices = np.argsort(Mvir_sim)
+# Mvir_sim = Mvir_sim[sorting_indices]
+
+
 Mvir_sim = np.array(Mvir_sim, dtype='float32')
-sorting_indices = np.argsort(Mvir_sim)
-Mvir_sim = Mvir_sim[sorting_indices]
+Rvir_sim = np.array(Rvir_sim, dtype='float32')
 
-
-
-
-rho_dm_sim = np.array(rho_dm_sim, dtype='float32')[sorting_indices]#[:, idx]
-sigma_lnrho_dm = np.vstack(sigma_lnrho_dm)[sorting_indices]#[:, idx]
-r_bins_sim = np.vstack(r_bins_sim)[sorting_indices]
+rho_dm_sim = np.array(rho_dm_sim, dtype='float32')#[sorting_indices]#[:, idx]
+sigma_lnrho_dm = np.vstack(sigma_lnrho_dm)#[sorting_indices]#[:, idx]
+r_bins_sim = np.vstack(r_bins_sim)#[sorting_indices]
 
 mask = (Mvir_sim>=10**(mmin)) & (Mvir_sim<10**mmax)
 print(f'{np.log10(Mvir_sim[mask].min()):.2f}, {np.log10(Mvir_sim[mask].max()):.2f}')
@@ -171,21 +179,25 @@ print(f'Using Likelihood for {field} field(s)')
 
 
 #####-------------- RUN MCMC --------------#####
-base_path = '../../magneticum-data/data/DM_conc'
+base_path = '../../magneticum-data/data/DM_conc/test/'
 fit_result = []
 
 fig = plt.figure()
 
-
 for i in tqdm(range(sum(mask))):
+	this_rvir = Rvir_sim[i]
+	this_halo_mass = Mvir_sim[i]
 	this_r_bins = r_bins_sim[i]
-	idx = this_r_bins<=1.
+	idx = (this_r_bins*this_rvir>40) & (this_r_bins<=1.) 
 	
 	this_r_bins = this_r_bins[idx]
 	this_rho_dm_sim = rho_dm_sim[i][idx] # Don't change variable names; called in likelihood using `globals()`
-	this_halo_mass = Mvir_sim[i]
 	this_sigma_lnrho_dm = sigma_lnrho_dm[i][idx]
-	
+    
+	## Use mean rho to place prior    
+	mean_rho = np.log10(this_halo_mass/(4/3*np.pi*this_rvir**3))
+	starting_point[1] = mean_rho    
+# 	these_bounds[1] = [1, mean_rho+1]
 
 	# sol_minimize = scipy.optimize.least_squares(joint_likelihood, sol.x, bounds=np.array(these_bounds).T, args=(this_halo_mass, this_r_bins), xtol=1e-12)
 	# minimizer_kwargs = {"method": "L-BFGS-B", "bounds": np.array(these_bounds), "args": (this_halo_mass, this_r_bins)}
@@ -198,12 +210,19 @@ for i in tqdm(range(sum(mask))):
 	fitter.update_param(fit_par, sol.x)
 	rho_dm_theory, r = fitter.get_rho_dm_profile(this_halo_mass*u.Msun/cu.littleh, r_bins=this_r_bins, z=0)
 
+# 	if sol.x[0]>15.:
+# 		fig2, ax2 = plt.subplots(1, 1)
+# 		ax2.errorbar(r, np.log(this_rho_dm_sim), yerr=this_sigma_lnrho_dm, c='dodgerblue', alpha=0.2)
+# 		ax2.semilogx(r, np.log(rho_dm_theory.value), c='orangered', alpha=0.2)
+# 		fig2.savefig('temp.pdf')
+# 		ipdb.set_trace()        
+# 	else:
+# 		pass
 	plt.semilogx(r, this_rho_dm_sim/rho_dm_theory.value, c='dodgerblue', alpha=0.4)
-	#plt.loglog(r, this_rho_dm_sim, c='dodgerblue', alpha=0.2)
-	#plt.loglog(r, rho_dm_theory.value, c='orangered', alpha=0.2)
-	#plt.show()
 
-plt.savefig(f'{base_path}/DM_prof_residual_{mmin}_{mmax}_{chi2_type}.pdf')
+plt.ylabel('$\\rho_{\mathrm{sim}}/\\rho_{\mathrm{NFW}}$')
+plt.xlabel('$r/R_{\mathrm{vir}}$')
+plt.savefig(f'{base_path}/DM_prof_residual_{mmin}_{mmax}_{chi2_type}.pdf', bbox_inches='tight')
 plt.close()
 
 result = np.vstack(fit_result)
@@ -214,7 +233,7 @@ plt.colorbar()
 plt.ylabel('Concentration')
 plt.xlabel('Virial Mass [Msun]')
 plt.xscale('log')
-plt.savefig(f'{base_path}/conc_{mmin}_{mmax}_{chi2_type}.pdf')
+plt.savefig(f'{base_path}/conc_{mmin}_{mmax}_{chi2_type}.pdf', bbox_inches='tight')
 plt.close()
 
 plt.figure()
@@ -222,7 +241,7 @@ plt.scatter(result[:,0], result[:, -1], c='dodgerblue', alpha=0.2)
 plt.ylabel('Cost Fn.')
 plt.xlabel('Virial Mass [Msun]')
 plt.xscale('log')
-plt.savefig(f'{base_path}/chi2_{mmin}_{mmax}_{chi2_type}.pdf')
+plt.savefig(f'{base_path}/chi2_{mmin}_{mmax}_{chi2_type}.pdf', bbox_inches='tight')
 plt.close()
 
 joblib.dump(result, f'{base_path}/DM_conc_{mmin}_{mmax}_{chi2_type}.pkl')
