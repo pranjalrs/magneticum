@@ -1,5 +1,7 @@
 import glob
 import joblib
+import matplotlib.colors as colors
+import matplotlib.pyplot as plt
 import numpy as np
 import os
 import re
@@ -93,7 +95,7 @@ def get_comoving_electron_pressure_Mead(mass, Temp, Y, volume):
 
 def get_physical_electron_pressure_Mead(mass, Temp, Y, volume, z, little_h):
 	comoving_Pe = get_comoving_electron_pressure_Mead(mass, Temp, Y, volume)
-	physical_Pe = comoving_Pe* Gadget.convert.pressure_to_physical(z, little_h)
+	physical_Pe = comoving_Pe*Gadget.convert.pressure_to_physical(z, little_h)
 
 	return physical_Pe
 
@@ -200,7 +202,7 @@ def get_field_for_halo(particle_data, mask, z, little_h, field, r1=None, r2=None
 		return np.concatenate((rho_gas, rho_star, rho_cdm))
 
 
-def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, z, little_h, estimator='median'):
+def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, save_proj=False, estimator='median'):
 	"""Gets field profile for a given halo in physical units
 	To Do: Update Docstring
 
@@ -244,18 +246,24 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, z, little_
 
 	profiles_dict = {field: [[], [], [], []] for field in fields}
 
+	if save_proj is True:
+		fig, ax = plt.subplots(len(fields), 3, figsize=(10, 3.5*len(fields)))
+
+	else:
+		ax = None
 	for field in fields:
 		if field in ['Pe_Mead', 'matter', 'gas', 'cdm', 'v_disp']:
-			profile, r, sigma_prof, sigma_lnprof = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator='sum')
+			profile, r, npart = _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, field, ax)
 
 		else:
-			profile, r, sigma_prof, sigma_lnprof = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator)
+			profile, r, npart = _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator)
 
 		profiles_dict[field][0] = profile
 		profiles_dict[field][1] = r
-		profiles_dict[field][2] = sigma_prof
-		profiles_dict[field][3] = sigma_lnprof
+		profiles_dict[field][2] = npart
 
+	if save_proj is True:
+		plt.savefig('test.pdf', bbox_inches='tight')
 	return profiles_dict
 
 
@@ -338,6 +346,110 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 
 	return  profile, weighted_bin_center, sigma_prof, sigma_lnprof
 
+
+def _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, field, ax):
+	rmin, rmax = 0.1*halo_radius, 1*halo_radius
+	bins = np.logspace(-1.5, 0, 20)*halo_radius  # Radial bin edges in terms of Rvir
+
+	## g3read.to_spherical returns an array of [r, theta, phi]
+	# Compute particle pos w.r.t. halo center (as a fraction of Rvir)
+	particle_pos = {}
+	mask = {}
+	for this_ptype in ptype:
+		if particle_data[this_ptype]['POS '] is not None:
+			distance = g3read.to_spherical(particle_data[this_ptype]['POS '], halo_center).T[0]
+			particle_pos[this_ptype] = distance
+			
+			## Create mask for particle outside rmax	
+			mask[this_ptype] = distance < rmax
+		else:
+			ptype.remove(this_ptype)
+
+
+	## Make histograms
+	_
+
+	# To assign e.g, pressure to each particle we also need its the volume of the shell it is in
+	# This is only required for make 2D maps
+	field, binned_field, bin_center = _get_field_for_halo2(particle_pos, particle_data, particle_volume, field)
+
+
+	
+	if ax is None:
+		return bin_rho, bin_centers, part_per_bin
+	
+	## Hack: need to fix later
+	if field == 'cdm':
+		this_ptype = 1
+	
+	elif field in ['Pe_Mead', 'gas', 'Temp']:
+		this_ptype = 0
+
+	x = particle_data[this_ptype]['POS '][:, 0][mask[this_ptype]]/1e3 - halo_center[0]/1e3
+	y = particle_data[this_ptype]['POS '][:, 1][mask[this_ptype]]/1e3 - halo_center[1]/1e3
+	z = particle_data[this_ptype]['POS '][:, 2][mask[this_ptype]]/1e3 - halo_center[2]/1e3
+
+
+	## x-y projection
+	ax[0].hist2d(x, y, weights=field_data, bins=100,  norm = colors.LogNorm(), rasterized=True)
+	ax[0].set(xlabel='X [cMpc/h]', ylabel='Y [cMpc/h]')
+
+	## x-z projection
+	ax[1].hist2d(x, z, weights=field_data, bins=100,  norm = colors.LogNorm(), rasterized=True)
+	ax[1].set(xlabel='X [cMpc/h]', ylabel='Z [cMpc/h]')
+
+	## y-z projection
+	ax[1].hist2d(y, z, weights=field_data, bins=100,  norm = colors.LogNorm(), rasterized=True)
+	ax[1].set(xlabel='Y [cMpc/h]', ylabel='Z [cMpc/h]')
+
+	circle = plt.Circle((0, 0), halo_radius/1e3, ls='--', color='w', fill=False)
+	for i in range(3):
+		ax[i].add_patch(circle)
+		ax[i].scatter(0., 0., marker='x', c='r')
+		ax[i].set_xlim(-5., 5.)
+		ax[i].set_ylim(-5., 5.)
+		ax[i].set_aspect('equal')
+
+	return bin_rho, bin_centers, part_per_bin
+
+
+def _get_field_for_halo2(particle_pos, particle_data, field, bins, mask):
+
+	if field == 'cdm':
+		# First mask out al particles outside region of interest
+		ptype = 1 # For DM
+		mass = particle_data[ptype]['MASS'][mask[ptype]]*Gadget.units.mass
+		these_pos = particle_pos[ptype][mask[ptype]]
+
+		bin_centers, bins_shell, part_per_bin = _build_hist_bins(these_pos, bins)
+		particle_volume = bins_shell[np.digitize(particle_pos, bins)-1]*Gadget.units.length**3
+
+		# Now compute `field`
+		density = mass/particle_volume  # Per particle and in code units
+		binned_density = np.histogram(this_pos, weights=density, bins=bins, density=False)[0]
+		return density, binned_density, bin_centers
+
+
+	if field == 'Pe_Mead':
+		ptype = 0  # For gas
+     	mass = particle_data[ptype]['MASS'][mask[ptype]]
+		Temp = particle_data[ptype]['TEMP'][mask[ptype]]
+		Y = particle_data[ptype]['Zs  '][mask[ptype]][:, 0]  # Helium Fraction
+
+		bin_centers, bins_shell, part_per_bin = _build_hist_bins(these_pos, bins)
+		particle_volume = bins_shell[np.digitize(particle_pos, bins)-1]*Gadget.units.length**3
+
+		Pe_comoving = get_comoving_electron_pressure_Mead(mass, Temp, Y, particle_volume)
+		return Pe_comoving
+
+
+def _build_hist_bins(pos, bins):
+	part_per_bin = np.histogram(pos, bins=bins, density=False)[0]
+	bin_pos_sum = np.histogram(pos, weights=pos, bins=bins, density=False)[0]
+	bin_centers = bin_pos_sum/part_per_bin  # Average bin center weighted by number of particles
+	bins_shell = 4./3.*np.pi*(bins[1:]**3 - bins[:-1]**3) 
+
+	return bin_centers, bins_shell, part_per_bin
 
 def get_halo_catalog(group_base, blocks=['GPOS', 'MVIR', 'RVIR', 'M5CC', 'R5CC'], mmin=1e12):
 	box_name = group_base.split('/')[-3]
