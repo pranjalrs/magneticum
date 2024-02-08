@@ -44,11 +44,12 @@ mmin, mmax = args.mmin, args.mmax
 
 field = ['rho_dm']
 
+munit = u.Msun/cu.littleh
 #####-------------- Likelihood --------------#####
 def likelihood(theory_prof, field):
 	sim_prof = globals()['this_'+field+'_sim'] # Simulation profile
 	sim_sigma_lnprof = globals()[f'this_sigma_ln{field}']# Measurement uncertainty
-# 	sim_sigma_prof = globals()[f'this_sigma_{field}']# Measurement uncertainty
+	sim_sigma_prof = globals()[f'this_sigma_{field}']# Measurement uncertainty
 
 	if chi2_type == 'log':
 		num = np.log(sim_prof / theory_prof.value)**2
@@ -57,7 +58,6 @@ def likelihood(theory_prof, field):
 	elif chi2_type == 'linear':
 		num = (sim_prof - theory_prof.value)**2
 		denom = sim_sigma_prof**2
-
 
 	idx = sim_prof==0
 	num = ma.array(num, mask=idx, fill_value=0)
@@ -69,7 +69,7 @@ def likelihood(theory_prof, field):
 
 	return chi2
 
-def joint_likelihood(x, mass, r_bins, z=0):
+def joint_likelihood(x, data, Mvir, Rvir, r_bins, z=0):
 	for i in range(len(fit_par)):
 		lb, ub = bounds[fit_par[i]]
 		if x[i]<lb or x[i]>ub:
@@ -77,17 +77,46 @@ def joint_likelihood(x, mass, r_bins, z=0):
 
 	fitter.update_param(fit_par, x)
 
-	mvir = mass*u.Msun/cu.littleh
 	## Get profile for each halo
-	rho_dm_theory, r = fitter.get_rho_dm_profile(mvir, r_bins=r_bins, z=z)
+	rho_dm_theory, r = fitter.get_rho_dm_profile(mvir*munit, r_bins=r_bins, z=z)
 
 	like_rho_dm, like_rho, like_Temp, like_Pe = 0., 0., 0., 0.
 
 	if 'rho_dm' in field:
 		like_rho_dm = likelihood(rho_dm_theory, 'rho_dm')
+	
+	## Check if the the mass enclosed in the profile is consistent with 
+	## The halo mass in the catalog
+	M_nfw = get_NFW_mass(Rvir, fitter.get_concentration(mvir*munit, z=0), 10**fitter.lognorm_rho)
+
+	if M_nfw>Mvir: return -np.inf
 
 	loglike = like_rho_dm + like_rho + like_Temp + like_Pe
 	return loglike
+
+def joint_likelihood_DE(x, data, Mvir, Rvir, r_bins, z=0):
+	return - joint_likelihood(x, data, Mvir, Rvir, r_bins, z=0)
+
+def get_NFW_mass(rvir, conc, rho0):
+	## Integral of the NFW profile up to 1Rvir
+	rs = rvir/conc
+	return 4*np.pi*rho0*rs**3*( np.log(1+conc) - conc/(1+conc))
+
+def run_mcmc(x0, nsteps, nwalkers, args):
+	ndim = len(fit_par)
+	p0_walkers = emcee.utils.sample_ball(x0, std, size=nwalkers)
+
+	for i, key in enumerate(fit_par):
+		low_lim, up_lim = bounds[fit_par[i]]
+
+	for walker in range(nwalkers):
+		while p0_walkers[walker, i] < low_lim or p0_walkers[walker, i] > up_lim:
+			p0_walkers[walker, i] = np.random.rand()*std[i] + starting_point[i]
+
+	sampler = emcee.EnsembleSampler(nwalkers, ndim, joint_likelihood, args=args)
+	sampler.run_mcmc(p0_walkers, nsteps=nsteps, progress=False)
+
+	return sampler
 
 bounds = {'lognorm_rho': [1, 20],
 			'conc_param': [1, 20]}
@@ -99,19 +128,8 @@ std_dev = {'lognorm_rho': 0.1,
 			'conc_param': 0.1}
 
 #####-------------- Load Data --------------#####
-#save_path = f'../../magneticum-data/data/emcee_magneticum_cM/prof_{args.field}_halos_bin/{run}'
-#save_path = f'../../magneticum-data/data/emcee_new/prof_{args.field}_halos_bin/{run}'
-
-# data_path = '../../magneticum-data/data/profiles_median'
-# files = glob.glob(f'{data_path}/Box1a/Pe_Pe_Mead_Temp_matter_cdm_gas_v_disp_z=0.00_mvir_1.0E+13_1.0E+16.pkl')
-# files += glob.glob(f'{data_path}/Box2/Pe_Pe_Mead_Temp_matter_cdm_gas_v_disp_z=0.00_mvir_1.0E+12_1.0E+13.pkl')
 files = glob.glob('/home/u31/pranjalrs/*.pkl')
 
-#files = [f'{data_path}/Box1a/Pe_Pe_Mead_Temp_matter_cdm_gas_z=0.00_mvir_1.0E+13_1.0E+15_coarse.pkl']
-#files += [f'{data_path}/Box2/Pe_Pe_Mead_Temp_matter_cdm_gas_z=0.00_mvir_1.0E+12_1.0E+13_coarse.pkl']
-
-## We will interpolate all measured profiles to the same r_bins as 
-## the analytical profile for computational efficiency
 rho_dm_sim= []
 sigma_rho_dm = []
 sigma_lnrho_dm = []
@@ -132,31 +150,26 @@ for f in files:
 
 		# These should be after all the if statements
 		rho_dm_sim.append(profile)
+		sigma_rho_dm.append(sigma_prof)
 		sigma_lnrho_dm.append(sigma_lnprof)
 		r_bins_sim.append(r)
 
 		Rvir_sim.append(halo['rvir'])
 		Mvir_sim.append(halo['mvir'])
 
-# Since low mass halos have a large scatter we compute it separately for them
-
-# Now we need to sort halos in order of increasing mass
-# Since this is what the scipy interpolator expects
-# sorting_indices = np.argsort(Mvir_sim)
-# Mvir_sim = Mvir_sim[sorting_indices]
-
-
 Mvir_sim = np.array(Mvir_sim, dtype='float32')
 Rvir_sim = np.array(Rvir_sim, dtype='float32')
 
-rho_dm_sim = np.array(rho_dm_sim, dtype='float32')#[sorting_indices]#[:, idx]
-sigma_lnrho_dm = np.vstack(sigma_lnrho_dm)#[sorting_indices]#[:, idx]
-r_bins_sim = np.vstack(r_bins_sim)#[sorting_indices]
+rho_dm_sim = np.array(rho_dm_sim, dtype='float32')
+sigma_rho_dm = np.vstack(sigma_rho_dm)
+sigma_lnrho_dm = np.vstack(sigma_lnrho_dm)
+r_bins_sim = np.vstack(r_bins_sim)
 
 mask = (Mvir_sim>=10**(mmin)) & (Mvir_sim<10**mmax)
 print(f'{np.log10(Mvir_sim[mask].min()):.2f}, {np.log10(Mvir_sim[mask].max()):.2f}')
 
 rho_dm_sim = rho_dm_sim[mask]
+sigma_rho_dm = sigma_rho_dm[mask]
 sigma_lnrho_dm = sigma_lnrho_dm[mask]
 Mvir_sim = Mvir_sim[mask]
 r_bins_sim = r_bins_sim[mask]
@@ -186,24 +199,26 @@ fig = plt.figure()
 
 for i in tqdm(range(sum(mask))):
 	this_rvir = Rvir_sim[i]
-	this_halo_mass = Mvir_sim[i]
+	this_mvir = Mvir_sim[i]
 	this_r_bins = r_bins_sim[i]
-	idx = (this_r_bins*this_rvir>40) & (this_r_bins<=1.) 
-	
+
+	## Apply cut on rmin
+	idx = (this_r_bins*this_rvir>30) & (this_r_bins<=1.)
 	this_r_bins = this_r_bins[idx]
 	this_rho_dm_sim = rho_dm_sim[i][idx] # Don't change variable names; called in likelihood using `globals()`
+	this_sigma_rho_dm = sigma_rho_dm[i][idx]
 	this_sigma_lnrho_dm = sigma_lnrho_dm[i][idx]
-    
-	## Use mean rho to place prior    
-	mean_rho = np.log10(this_halo_mass/(4/3*np.pi*this_rvir**3))
-	starting_point[1] = mean_rho    
-# 	these_bounds[1] = [1, mean_rho+1]
 
-	# sol_minimize = scipy.optimize.least_squares(joint_likelihood, sol.x, bounds=np.array(these_bounds).T, args=(this_halo_mass, this_r_bins), xtol=1e-12)
-	# minimizer_kwargs = {"method": "L-BFGS-B", "bounds": np.array(these_bounds), "args": (this_halo_mass, this_r_bins)}
-	# sol = scipy.optimize.basinhopping(joint_likelihood, starting_point, niter=100, minimizer_kwargs=minimizer_kwargs)
-	sol = scipy.optimize.differential_evolution(joint_likelihood, bounds=np.array(these_bounds), x0=starting_point, args=(this_halo_mass, this_r_bins))
+	## Args to be passed to likelihood function
+	args = (this_rho_dm_sim, this_mvir, this_rvir,this_r_bins)
+	sol = scipy.optimize.differential_evolution_DE(joint_likelihood, bounds=np.array(these_bounds), x0=starting_point, args=args)
 
+	sampler = run_mcmc(sol.x, nsteps=300, nwalkers=40, args=args)
+	samples = sampler.get_chain(discard=200, flat=True)
+	mean = np.mean(samples, axis=0)
+	std = np.std(samples, axis=0)
+
+	assert np.abs(sol.x[0]-mean[0])<0.5*std[0]
 
 	fit_result.append([this_halo_mass, sol.x[0], sol.x[1], sol.fun])
 
