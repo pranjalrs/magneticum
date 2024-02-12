@@ -63,6 +63,7 @@ class Profile():
 		# 2 for concentration as free parameter
 		self.imass_conc = 0
 		self.conc_param = 8
+		self.rs = 0.5
 
 		self.lognorm_rho = -2
 		## Are you going to run MCMC?
@@ -192,20 +193,24 @@ class Profile():
 		if r_bins is None:
 			r_bins = np.logspace(np.log10(0.1), np.log10(1), 200)
 
-		r_virial = self.get_rvirial(M, z)
+# 		r_virial = self.get_rvirial(M, z)
 		c_M = self.get_concentration(M, z)
-		rs = r_virial/c_M
+# 		rs = r_virial/c_M
 
-		fcdm = 1 - self.omega_b/self.omega_m
-		Mcdm = M*fcdm
-
-		r = r_bins*r_virial
-		rho_cdm = 1/((r/rs)*(1 + r/rs)**2)  # NFW profile
-
+# 		fcdm = 1 - self.omega_b/self.omega_m
+# 		Mcdm = M*fcdm
 #		norm = 4*np.pi*rs**3 * (np.log(1 + c_M) - c_M/(1+c_M))
-		norm = 10**self.lognorm_rho*1e-26 #* 1e3
-		rho_cdm = rho_cdm * norm * u.g/u.cm**3  #Mcdm/norm
-		return (rho_cdm).to(u.g/u.cm**3, cu.with_H0(self.H0)).to(u.GeV/u.cm**3, u.mass_energy()), r_bins
+
+		num =  10**self.lognorm_rho
+		denom = (r_bins*c_M) * (1 + r_bins*c_M)**2
+		rho_cdm = num/denom* u.Msun/u.kpc**3
+
+# 		x = r_bins
+# 		Anfw = np.log(1+c_M) - c_M/(1+c_M)
+# 		mean_rho = 10**self.lognorm_rho
+# 		denom = 3 * Anfw * x * (1/c_M + x)**2
+# 		rho_cdm = mean_rho/denom * u.Msun/u.kpc**3  #Mcdm/norm
+		return rho_cdm, r_bins
 
 
 	def get_Pe_profile_interpolated(self, M, z=0, r_bins=None, return_rho=False, return_Temp=False):
@@ -526,15 +531,39 @@ class Profile():
 				rho_profs.append(this_rho_prof.value)
 				Temp_profs.append(this_Temp_prof.value)
 
-			self._rho_dm_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, rho_dm_profs)
-			self._Pe_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, Pe_profs)
-			self._rho_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, rho_profs)
-			self._Temp_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, Temp_profs)
-		
+# 			self._rho_dm_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs.value, r_bins, rho_dm_profs)
+# 			self._Pe_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, Pe_profs)
+# 			self._rho_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, rho_profs)
+# 			self._Temp_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, Temp_profs)
+
+			self._rho_dm_prof_interpolator[z] = self._build_2Dinterpolator(Mvirs.value, r_bins, rho_dm_profs)
+			self._Pe_prof_interpolator[z] = self._build_2Dinterpolator(Mvirs.value, r_bins, Pe_profs)
+			self._rho_prof_interpolator[z] = self._build_2Dinterpolator(Mvirs.value, r_bins, rho_profs)
+			self._Temp_prof_interpolator[z] = self._build_2Dinterpolator(Mvirs.value, r_bins, Temp_profs)
+
 		self._rho_dm_prof_interpolator_units = this_rho_dm_prof.unit
 		self._Pe_prof_interpolator_units = this_Pe_prof.unit
 		self._rho_prof_interpolator_units = this_rho_prof.unit
 		self._Temp_prof_interpolator_units = this_Temp_prof.unit
+
+
+	def _build_2Dinterpolator(self, halo_mass, r_bins, profile):
+		from scipy.interpolate import griddata, CloughTocher2DInterpolator
+		## Stolen from https://stackoverflow.com/questions/58750086/how-do-you-interpolate-2d-data-with-unique-y-arrays-for-each-x-array-value-in-py
+
+		if r_bins.ndim == 1:
+		# If the r_bins are same for all masses then repeat to get correct shape
+			r_bins_2D = list(r_bins)*len(halo_mass)
+
+		else:
+			r_bins_2D = r_bins
+
+		halo_mass_2D = np.repeat(halo_mass, len(r_bins)).T
+		points = np.stack((halo_mass_2D, r_bins_2D))  #obtain xy corrdinates for data points
+
+		values = np.concatenate((profile)) #obtain values
+
+		return CloughTocher2DInterpolator(points.T, values)
 
 
 	def _test_prof_interpolator(self, n=1000):
