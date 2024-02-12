@@ -1,5 +1,6 @@
 import glob
 import joblib
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
@@ -202,7 +203,7 @@ def get_field_for_halo(particle_data, mask, z, little_h, field, r1=None, r2=None
 		return np.concatenate((rho_gas, rho_star, rho_cdm))
 
 
-def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, save_proj=False, estimator='median'):
+def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent=False, save_proj=False, filename='', estimator='median'):
 	"""Gets field profile for a given halo in physical units
 	To Do: Update Docstring
 
@@ -230,126 +231,60 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, save_proj=
 	if not isinstance(fields, list): fields = [fields]
 	_assert_correct_field(fields)
 
-	ptype = [0]
+	ptype = [0, 1]
 	if 'matter' in fields:
-		ptype = [0, 1, 4]
-
-	elif 'cdm' in fields:
-		ptype = [1]
+		ptype += [4]
 
 	try:
-		particle_data = g3read.read_particles_in_box(snap_base, halo_center, 2*halo_radius, ['POS ', 'TEMP', 'MASS', 'VEL ', 'RHO ', 'Zs  '], ptype, use_super_indexes=True)
+		particle_data = g3read.read_particles_in_box(snap_base, halo_center, 2*halo_radius, ['POT ', 'POS ', 'TEMP', 'MASS', 'VEL ', 'RHO ', 'Zs  '], ptype, use_super_indexes=True)
 
 	except FileNotFoundError:
 		print(f'Snapshot directory {snap_base} not found!')
 		sys.exit(1)
+	
+	## Check if the particle at potential min. is close to halo center	
+	pot_min_idx = np.argmin( particle_data[1]['POT '])
+	GPOS = particle_data[1]['POS '][pot_min_idx]
+	
+	if not np.all(np.isclose(halo_center, GPOS, atol=1.5)):
+		print('Warning: Halo might be mis-centerd') 
+		print('Delta X={:.2f}, Delta Y={:.2f}, Delta Z={:.2f}'.format(*(halo_center-GPOS)))
+		if recal_cent is True:
+			print('Recentering...')
+			halo_center = GPOS
+		else:
+			print('Set recal_cent=True to compute a new halo center based on the position of DM particle with min. potential')
 
-	profiles_dict = {field: [[], [], [], []] for field in fields}
+
+	profiles_dict = {field: [[], [], []] for field in fields}
 
 	if save_proj is True:
-		fig, ax = plt.subplots(len(fields), 3, figsize=(10, 3.5*len(fields)))
+		fig, ax = plt.subplots(len(fields), 3, figsize=(14, 4*len(fields)), gridspec_kw={'width_ratios': [1, 1, 1.05]})
+		if len(fields) == 1: ax = [ax]
 
 	else:
 		ax = None
-	for field in fields:
+	for i, field in enumerate(fields):
 		if field in ['Pe_Mead', 'matter', 'gas', 'cdm', 'v_disp']:
-			profile, r, npart = _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, field, ax)
+			profile, r, npart = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, ax[i])
 
 		else:
-			profile, r, npart = _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator)
+			profile, r, npart = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator)
 
 		profiles_dict[field][0] = profile
 		profiles_dict[field][1] = r
 		profiles_dict[field][2] = npart
 
 	if save_proj is True:
-		plt.savefig('test.pdf', bbox_inches='tight')
+		plt.savefig(f'{filename}.pdf', bbox_inches='tight', dpi=100)
+		plt.close()
 	return profiles_dict
 
 
-def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator):
-	"""
-	To Do: Update Doctstring
-	"""
-	rmin, rmax = 0.1*halo_radius, 2*halo_radius
-	radial_bins = np.logspace(np.log10(rmin), np.log10(rmax), 17)  # Radial bin edges
 
-	## g3read.to_spherical returns an array of [r, theta, phi]
-	part_distance_from_center = {}
-
-	for this_ptype in ptype:
-		if particle_data[this_ptype]['POS '] is not None:
-			part_distance_from_center[this_ptype] = g3read.to_spherical(particle_data[this_ptype]['POS '], halo_center).T[0]
-		else:
-			#part_distance_from_center[this_ptype] = []
-			ptype.remove(this_ptype)
-
-
-	weighted_bin_center = np.ones(len(radial_bins)-1, dtype='float32')
-	profile = np.zeros(len(radial_bins)-1, dtype='float32')
-	sigma_prof = np.zeros(len(radial_bins)-1, dtype='float32')
-	sigma_lnprof = np.zeros(len(radial_bins)-1, dtype='float32')
-
-	## Calcualte field in each radial bin
-	for bin_index in range(len(radial_bins)-1):
-		r_low, r_up = radial_bins[bin_index], radial_bins[bin_index+1]
-
-		# Construct mask to select particles in bin
-		mask = {}
-		for this_ptype in ptype:
-			mask[this_ptype] = np.where((part_distance_from_center[this_ptype] >= r_low) & (part_distance_from_center[this_ptype] < r_up))[0]
-
-		# Check if we have particles in the bin
-		if np.sum([len(mask[this_ptype]) for this_ptype in ptype])!=0:
-			this_bin_field = get_field_for_halo(particle_data, mask, z, little_h, field, r_low, r_up).value
-			n_part = len(this_bin_field)  # No. of particles
-			
-			if estimator == 'median':
-				profile[bin_index] = np.median(this_bin_field)
-
-			elif estimator == 'mean':
-				profile[bin_index] = np.mean(this_bin_field)
-				sigma_prof[bin_index] = sigma_percentile(this_bin_field)/n_part**0.5
-				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))/n_part**0.5
-
-
-			elif estimator == 'sum':
-				profile[bin_index] = np.sum(this_bin_field)
-
-			try:
-				sigma_prof[bin_index] = sigma_percentile(this_bin_field)/n_part**0.5
-				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))/n_part**0.5
-			except:
-				sigma_prof[bin_index] = 0
-				sigma_lnprof[bin_index] = 0
-				
-
-			# Concatenate positions and masses for all ptypes
-			all_part_distance_from_center = []
-			all_part_mass = []
-			for part in ptype:
-				all_part_distance_from_center.append(part_distance_from_center[part][mask[part]])
-				all_part_mass.append(particle_data[part]['MASS'][mask[part]])
-
-			all_part_distance_from_center = np.concatenate(all_part_distance_from_center)
-			all_part_mass = np.concatenate(all_part_mass)
-
-			weighted_bin_center[bin_index] = np.average(all_part_distance_from_center, weights=all_part_mass)
-
-
-		else:
-			profile[bin_index] = 0
-			sigma_prof[bin_index] = np.nan
-			sigma_lnprof[bin_index] = np.nan
-			weighted_bin_center[bin_index] = radial_bins[bin_index]
-
-
-	return  profile, weighted_bin_center, sigma_prof, sigma_lnprof
-
-
-def _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, field, ax):
-	rmin, rmax = 0.1*halo_radius, 1*halo_radius
-	bins = np.logspace(-1.5, 0, 20)*halo_radius  # Radial bin edges in terms of Rvir
+def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field_type, ax):
+	rmin, rmax = 0.03*halo_radius, 2*halo_radius
+	bins = np.logspace(np.log10(rmin), np.log10(rmax), 21)  # Radial bin edges
 
 	## g3read.to_spherical returns an array of [r, theta, phi]
 	# Compute particle pos w.r.t. halo center (as a fraction of Rvir)
@@ -366,84 +301,112 @@ def _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, 
 			ptype.remove(this_ptype)
 
 
-	## Make histograms
-	_
-
 	# To assign e.g, pressure to each particle we also need its the volume of the shell it is in
 	# This is only required for make 2D maps
-	field, binned_field, bin_center = _get_field_for_halo2(particle_pos, particle_data, particle_volume, field)
-
-
+	field, binned_field, bin_centers, npart = _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask)
 	
 	if ax is None:
-		return bin_rho, bin_centers, part_per_bin
+		return binned_field, bin_centers, npart
 	
+#	ipdb.set_trace()	
 	## Hack: need to fix later
-	if field == 'cdm':
+	if field_type == 'cdm':
 		this_ptype = 1
-	
-	elif field in ['Pe_Mead', 'gas', 'Temp']:
-		this_ptype = 0
+		label = 'DM Density'	
 
+	elif field_type in ['Pe_Mead', 'gas', 'Temp']:
+		this_ptype = 0
+		label = 'Electron Pressure'	
+	
 	x = particle_data[this_ptype]['POS '][:, 0][mask[this_ptype]]/1e3 - halo_center[0]/1e3
 	y = particle_data[this_ptype]['POS '][:, 1][mask[this_ptype]]/1e3 - halo_center[1]/1e3
 	z = particle_data[this_ptype]['POS '][:, 2][mask[this_ptype]]/1e3 - halo_center[2]/1e3
 
 
 	## x-y projection
-	ax[0].hist2d(x, y, weights=field_data, bins=100,  norm = colors.LogNorm(), rasterized=True)
-	ax[0].set(xlabel='X [cMpc/h]', ylabel='Y [cMpc/h]')
+	ax[0].hist2d(x, y, weights=field, bins=100,  norm = colors.LogNorm(), rasterized=True)
+	ax[0].set(xlabel='$\\Delta$X [cMpc/h]', ylabel='$\\Delta$Y [cMpc/h]')
 
 	## x-z projection
-	ax[1].hist2d(x, z, weights=field_data, bins=100,  norm = colors.LogNorm(), rasterized=True)
-	ax[1].set(xlabel='X [cMpc/h]', ylabel='Z [cMpc/h]')
+	ax[1].hist2d(x, z, weights=field, bins=100,  norm = colors.LogNorm(), rasterized=True)
+	ax[1].set(xlabel='$\\Delta$X [cMpc/h]', ylabel='$\\Delta$Z [cMpc/h]')
+	ax[1].set_title(label)
 
 	## y-z projection
-	ax[1].hist2d(y, z, weights=field_data, bins=100,  norm = colors.LogNorm(), rasterized=True)
-	ax[1].set(xlabel='Y [cMpc/h]', ylabel='Z [cMpc/h]')
+	im = ax[2].hist2d(y, z, weights=field, bins=100,  norm = colors.LogNorm(), rasterized=True)
+	ax[2].set(xlabel='$\\Delta$Y [cMpc/h]', ylabel='$\\Delta$Z [cMpc/h]')
+	colorbar(im[3], ax=ax[2])	
 
-	circle = plt.Circle((0, 0), halo_radius/1e3, ls='--', color='w', fill=False)
 	for i in range(3):
+		circle = plt.Circle((0, 0), halo_radius/1e3, ls='--', color='orangered', fill=False)
 		ax[i].add_patch(circle)
-		ax[i].scatter(0., 0., marker='x', c='r')
-		ax[i].set_xlim(-5., 5.)
-		ax[i].set_ylim(-5., 5.)
+		ax[i].scatter(0., 0., marker='x', c='orangered')
+		ax[i].set_xlim(-2*rmax/1e3, 2*rmax/1e3)
+		ax[i].set_ylim(-2*rmax/1e3, 2*rmax/1e3)
 		ax[i].set_aspect('equal')
 
-	return bin_rho, bin_centers, part_per_bin
+	return binned_field, bin_centers, npart
 
 
-def _get_field_for_halo2(particle_pos, particle_data, field, bins, mask):
+def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask):
 
-	if field == 'cdm':
+	if field_type == 'cdm':
 		# First mask out al particles outside region of interest
 		ptype = 1 # For DM
-		mass = particle_data[ptype]['MASS'][mask[ptype]]*Gadget.units.mass
 		these_pos = particle_pos[ptype][mask[ptype]]
+		mass = particle_data[ptype]['MASS'][mask[ptype]]*Gadget.units.mass
 
 		bin_centers, bins_shell, part_per_bin = _build_hist_bins(these_pos, bins)
-		particle_volume = bins_shell[np.digitize(particle_pos, bins)-1]*Gadget.units.length**3
+		particle_volume = bins_shell[np.digitize(these_pos, bins)-1]*Gadget.units.length**3
 
 		# Now compute `field`
 		density = mass/particle_volume  # Per particle and in code units
-		binned_density = np.histogram(this_pos, weights=density, bins=bins, density=False)[0]
-		return density, binned_density, bin_centers
+		binned_density = np.histogram(these_pos, weights=density, bins=bins, density=False)[0]
+		return density, binned_density, bin_centers, part_per_bin
 
 
-	if field == 'Pe_Mead':
+	if field_type == 'gas':
+		ptype = 0 # For gas
+		these_pos = particle_pos[ptype][mask[ptype]]
+		mass = particle_data[ptype]['MASS'][mask[ptype]]*Gadget.units.mass
+
+		bin_centers, bins_shell, part_per_bin = _build_hist_bins(these_pos, bins)
+		particle_volume = bins_shell[np.digitize(these_pos, bins)-1]*Gadget.units.length**3
+
+		# Now compute `field`
+		density = mass/particle_volume  # Per particle and in code units
+		binned_density = np.histogram(these_pos, weights=density, bins=bins, density=False)[0]
+		return density, binned_density, bin_centers, part_per_bin
+
+
+	if field_type == 'Pe_Mead':
 		ptype = 0  # For gas
-     	mass = particle_data[ptype]['MASS'][mask[ptype]]
+		these_pos = particle_pos[ptype][mask[ptype]]
+		mass = particle_data[ptype]['MASS'][mask[ptype]]
 		Temp = particle_data[ptype]['TEMP'][mask[ptype]]
 		Y = particle_data[ptype]['Zs  '][mask[ptype]][:, 0]  # Helium Fraction
 
 		bin_centers, bins_shell, part_per_bin = _build_hist_bins(these_pos, bins)
-		particle_volume = bins_shell[np.digitize(particle_pos, bins)-1]*Gadget.units.length**3
+		particle_volume = bins_shell[np.digitize(these_pos, bins)-1]*Gadget.units.length**3
 
-		Pe_comoving = get_comoving_electron_pressure_Mead(mass, Temp, Y, particle_volume)
-		return Pe_comoving
+		Pe = get_comoving_electron_pressure_Mead(mass, Temp, Y, particle_volume)
+		binned_Pe = np.histogram(these_pos, weights=Pe.value, bins=bins, density=False)[0]
+		return Pe.value, binned_Pe*Pe.unit, bin_centers, part_per_bin
 
 
 def _build_hist_bins(pos, bins):
+	"""
+	Build histogram for a given set of particle positions and bins. 
+
+	Parameters:
+	pos (array-like): Array of particle positions.
+	bins (int or array-like): Number of bins or bin edges.
+
+	Returns:
+	bin_centers (ndarray): Array of bin centers.
+	bins_shell (ndarray): Array of shell volumes.
+	part_per_bin (ndarray): Array of particle counts per bin.
+	"""
 	part_per_bin = np.histogram(pos, bins=bins, density=False)[0]
 	bin_pos_sum = np.histogram(pos, weights=pos, bins=bins, density=False)[0]
 	bin_centers = bin_pos_sum/part_per_bin  # Average bin center weighted by number of particles
@@ -623,3 +586,12 @@ def get_fb(filename):
 
 def sigma_percentile(arr):
 	return (np.percentile(arr, 84) - np.percentile(arr, 16))/2
+
+def colorbar(mappable, ax):
+    last_axes = plt.gca()
+    fig = ax.figure
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    cbar = fig.colorbar(mappable, cax=cax)
+    plt.sca(last_axes)
+    return cbar
