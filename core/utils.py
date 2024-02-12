@@ -203,7 +203,7 @@ def get_field_for_halo(particle_data, mask, z, little_h, field, r1=None, r2=None
 		return np.concatenate((rho_gas, rho_star, rho_cdm))
 
 
-def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, save_proj=False, filename='', estimator='median'):
+def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent=False, save_proj=False, filename='', estimator='median'):
 	"""Gets field profile for a given halo in physical units
 	To Do: Update Docstring
 
@@ -231,24 +231,35 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, save_proj=
 	if not isinstance(fields, list): fields = [fields]
 	_assert_correct_field(fields)
 
-	ptype = [0]
+	ptype = [0, 1]
 	if 'matter' in fields:
 		ptype += [4]
 
-	elif 'cdm' in fields:
-		ptype += [1]
-
 	try:
-		particle_data = g3read.read_particles_in_box(snap_base, halo_center, 2*halo_radius, ['POS ', 'TEMP', 'MASS', 'VEL ', 'RHO ', 'Zs  '], ptype, use_super_indexes=True)
+		particle_data = g3read.read_particles_in_box(snap_base, halo_center, 2*halo_radius, ['POT ', 'POS ', 'TEMP', 'MASS', 'VEL ', 'RHO ', 'Zs  '], ptype, use_super_indexes=True)
 
 	except FileNotFoundError:
 		print(f'Snapshot directory {snap_base} not found!')
 		sys.exit(1)
+	
+	## Check if the particle at potential min. is close to halo center	
+	pot_min_idx = np.argmin( particle_data[1]['POT '])
+	GPOS = particle_data[1]['POS '][pot_min_idx]
+	
+	if not np.all(np.isclose(halo_center, GPOS, atol=1.5)):
+		print('Warning: Halo might be mis-centerd') 
+		print('Delta X={:.2f}, Delta Y={:.2f}, Delta Z={:.2f}'.format(*(halo_center-GPOS)))
+		if recal_cent is True:
+			print('Recentering...')
+			halo_center = GPOS
+		else:
+			print('Set recal_cent=True to compute a new halo center based on the position of DM particle with min. potential')
 
-	profiles_dict = {field: [[], [], [], []] for field in fields}
+
+	profiles_dict = {field: [[], [], []] for field in fields}
 
 	if save_proj is True:
-		fig, ax = plt.subplots(len(fields), 3, figsize=(12, 4*len(fields)), gridspec_kw={'width_ratios': [1, 1, 1.05]})
+		fig, ax = plt.subplots(len(fields), 3, figsize=(14, 4*len(fields)), gridspec_kw={'width_ratios': [1, 1, 1.05]})
 		if len(fields) == 1: ax = [ax]
 
 	else:
@@ -266,6 +277,7 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, save_proj=
 
 	if save_proj is True:
 		plt.savefig(f'{filename}.pdf', bbox_inches='tight', dpi=100)
+		plt.close()
 	return profiles_dict
 
 
@@ -350,8 +362,8 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 
 
 def _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, field_type, ax):
-	rmin, rmax = 0.1*halo_radius, 2*halo_radius
-	bins = np.logspace(-1.5, 0, 20)*rmax # Radial bin edges in terms of Rvir
+	rmin, rmax = 0.03*halo_radius, 2*halo_radius
+	bins = np.logspace(np.log10(rmin), np.log10(rmax), 21)  # Radial bin edges
 
 	## g3read.to_spherical returns an array of [r, theta, phi]
 	# Compute particle pos w.r.t. halo center (as a fraction of Rvir)
@@ -394,24 +406,24 @@ def _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, 
 
 	## x-y projection
 	ax[0].hist2d(x, y, weights=field, bins=100,  norm = colors.LogNorm(), rasterized=True)
-	ax[0].set(xlabel='X [cMpc/h]', ylabel='Y [cMpc/h]')
+	ax[0].set(xlabel='$\\Delta$X [cMpc/h]', ylabel='$\\Delta$Y [cMpc/h]')
 
 	## x-z projection
 	ax[1].hist2d(x, z, weights=field, bins=100,  norm = colors.LogNorm(), rasterized=True)
-	ax[1].set(xlabel='X [cMpc/h]', ylabel='Z [cMpc/h]')
+	ax[1].set(xlabel='$\\Delta$X [cMpc/h]', ylabel='$\\Delta$Z [cMpc/h]')
 	ax[1].set_title(label)
 
 	## y-z projection
 	im = ax[2].hist2d(y, z, weights=field, bins=100,  norm = colors.LogNorm(), rasterized=True)
-	ax[2].set(xlabel='Y [cMpc/h]', ylabel='Z [cMpc/h]')
+	ax[2].set(xlabel='$\\Delta$Y [cMpc/h]', ylabel='$\\Delta$Z [cMpc/h]')
 	colorbar(im[3], ax=ax[2])	
 
 	for i in range(3):
-		circle = plt.Circle((0, 0), halo_radius/1e3, ls='--', color='w', fill=False)
+		circle = plt.Circle((0, 0), halo_radius/1e3, ls='--', color='orangered', fill=False)
 		ax[i].add_patch(circle)
-		ax[i].scatter(0., 0., marker='x', c='r')
-		ax[i].set_xlim(-5., 5.)
-		ax[i].set_ylim(-5., 5.)
+		ax[i].scatter(0., 0., marker='x', c='orangered')
+		ax[i].set_xlim(-2*rmax/1e3, 2*rmax/1e3)
+		ax[i].set_ylim(-2*rmax/1e3, 2*rmax/1e3)
 		ax[i].set_aspect('equal')
 
 	return binned_field, bin_centers, npart
