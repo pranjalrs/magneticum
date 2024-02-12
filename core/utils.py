@@ -266,10 +266,10 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 		ax = None
 	for i, field in enumerate(fields):
 		if field in ['Pe_Mead', 'matter', 'gas', 'cdm', 'v_disp']:
-			profile, r, npart = _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, field, ax[i])
+			profile, r, npart = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, ax[i])
 
 		else:
-			profile, r, npart = _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator)
+			profile, r, npart = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator)
 
 		profiles_dict[field][0] = profile
 		profiles_dict[field][1] = r
@@ -281,87 +281,8 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 	return profiles_dict
 
 
-def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator):
-	"""
-	To Do: Update Doctstring
-	"""
-	rmin, rmax = 0.1*halo_radius, 2*halo_radius
-	radial_bins = np.logspace(np.log10(rmin), np.log10(rmax), 17)  # Radial bin edges
 
-	## g3read.to_spherical returns an array of [r, theta, phi]
-	part_distance_from_center = {}
-
-	for this_ptype in ptype:
-		if particle_data[this_ptype]['POS '] is not None:
-			part_distance_from_center[this_ptype] = g3read.to_spherical(particle_data[this_ptype]['POS '], halo_center).T[0]
-		else:
-			#part_distance_from_center[this_ptype] = []
-			ptype.remove(this_ptype)
-
-
-	weighted_bin_center = np.ones(len(radial_bins)-1, dtype='float32')
-	profile = np.zeros(len(radial_bins)-1, dtype='float32')
-	sigma_prof = np.zeros(len(radial_bins)-1, dtype='float32')
-	sigma_lnprof = np.zeros(len(radial_bins)-1, dtype='float32')
-
-	## Calcualte field in each radial bin
-	for bin_index in range(len(radial_bins)-1):
-		r_low, r_up = radial_bins[bin_index], radial_bins[bin_index+1]
-
-		# Construct mask to select particles in bin
-		mask = {}
-		for this_ptype in ptype:
-			mask[this_ptype] = np.where((part_distance_from_center[this_ptype] >= r_low) & (part_distance_from_center[this_ptype] < r_up))[0]
-
-		# Check if we have particles in the bin
-		if np.sum([len(mask[this_ptype]) for this_ptype in ptype])!=0:
-			this_bin_field = get_field_for_halo(particle_data, mask, z, little_h, field, r_low, r_up).value
-			n_part = len(this_bin_field)  # No. of particles
-			
-			if estimator == 'median':
-				profile[bin_index] = np.median(this_bin_field)
-
-			elif estimator == 'mean':
-				profile[bin_index] = np.mean(this_bin_field)
-				sigma_prof[bin_index] = sigma_percentile(this_bin_field)/n_part**0.5
-				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))/n_part**0.5
-
-
-			elif estimator == 'sum':
-				profile[bin_index] = np.sum(this_bin_field)
-
-			try:
-				sigma_prof[bin_index] = sigma_percentile(this_bin_field)/n_part**0.5
-				sigma_lnprof[bin_index] = sigma_percentile(np.log(this_bin_field))/n_part**0.5
-			except:
-				sigma_prof[bin_index] = 0
-				sigma_lnprof[bin_index] = 0
-				
-
-			# Concatenate positions and masses for all ptypes
-			all_part_distance_from_center = []
-			all_part_mass = []
-			for part in ptype:
-				all_part_distance_from_center.append(part_distance_from_center[part][mask[part]])
-				all_part_mass.append(particle_data[part]['MASS'][mask[part]])
-
-			all_part_distance_from_center = np.concatenate(all_part_distance_from_center)
-			all_part_mass = np.concatenate(all_part_mass)
-
-			weighted_bin_center[bin_index] = np.average(all_part_distance_from_center, weights=all_part_mass)
-
-
-		else:
-			profile[bin_index] = 0
-			sigma_prof[bin_index] = np.nan
-			sigma_lnprof[bin_index] = np.nan
-			weighted_bin_center[bin_index] = radial_bins[bin_index]
-
-
-	return  profile, weighted_bin_center, sigma_prof, sigma_lnprof
-
-
-def _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, field_type, ax):
+def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field_type, ax):
 	rmin, rmax = 0.03*halo_radius, 2*halo_radius
 	bins = np.logspace(np.log10(rmin), np.log10(rmax), 21)  # Radial bin edges
 
@@ -382,9 +303,7 @@ def _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, 
 
 	# To assign e.g, pressure to each particle we also need its the volume of the shell it is in
 	# This is only required for make 2D maps
-	field, binned_field, bin_centers, npart = _get_field_for_halo2(particle_pos, particle_data, field_type, bins, mask)
-
-
+	field, binned_field, bin_centers, npart = _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask)
 	
 	if ax is None:
 		return binned_field, bin_centers, npart
@@ -429,11 +348,25 @@ def _collect_profiles_for_halo2(halo_center, halo_radius, particle_data, ptype, 
 	return binned_field, bin_centers, npart
 
 
-def _get_field_for_halo2(particle_pos, particle_data, field_type, bins, mask):
+def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask):
 
 	if field_type == 'cdm':
 		# First mask out al particles outside region of interest
 		ptype = 1 # For DM
+		these_pos = particle_pos[ptype][mask[ptype]]
+		mass = particle_data[ptype]['MASS'][mask[ptype]]*Gadget.units.mass
+
+		bin_centers, bins_shell, part_per_bin = _build_hist_bins(these_pos, bins)
+		particle_volume = bins_shell[np.digitize(these_pos, bins)-1]*Gadget.units.length**3
+
+		# Now compute `field`
+		density = mass/particle_volume  # Per particle and in code units
+		binned_density = np.histogram(these_pos, weights=density, bins=bins, density=False)[0]
+		return density, binned_density, bin_centers, part_per_bin
+
+
+	if field_type == 'gas':
+		ptype = 0 # For gas
 		these_pos = particle_pos[ptype][mask[ptype]]
 		mass = particle_data[ptype]['MASS'][mask[ptype]]*Gadget.units.mass
 
@@ -462,6 +395,18 @@ def _get_field_for_halo2(particle_pos, particle_data, field_type, bins, mask):
 
 
 def _build_hist_bins(pos, bins):
+	"""
+	Build histogram for a given set of particle positions and bins. 
+
+	Parameters:
+	pos (array-like): Array of particle positions.
+	bins (int or array-like): Number of bins or bin edges.
+
+	Returns:
+	bin_centers (ndarray): Array of bin centers.
+	bins_shell (ndarray): Array of shell volumes.
+	part_per_bin (ndarray): Array of particle counts per bin.
+	"""
 	part_per_bin = np.histogram(pos, bins=bins, density=False)[0]
 	bin_pos_sum = np.histogram(pos, weights=pos, bins=bins, density=False)[0]
 	bin_centers = bin_pos_sum/part_per_bin  # Average bin center weighted by number of particles
