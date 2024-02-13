@@ -236,7 +236,7 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 		ptype += [4]
 
 	try:
-		particle_data = g3read.read_particles_in_box(snap_base, halo_center, 2*halo_radius, ['POT ', 'POS ', 'TEMP', 'MASS', 'VEL ', 'RHO ', 'Zs  '], ptype, use_super_indexes=True)
+		particle_data = g3read.read_particles_in_box(snap_base, halo_center, halo_radius, ['POT ', 'POS ', 'TEMP', 'MASS', 'VEL ', 'RHO ', 'Zs  '], ptype, use_super_indexes=True)
 
 	except FileNotFoundError:
 		print(f'Snapshot directory {snap_base} not found!')
@@ -263,7 +263,7 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 		if len(fields) == 1: ax = [ax]
 
 	else:
-		ax = None
+		ax = [None]*len(fields)
 	for i, field in enumerate(fields):
 		if field in ['Pe_Mead', 'matter', 'gas', 'cdm', 'v_disp']:
 			profile, r, npart = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, ax[i])
@@ -283,8 +283,8 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 
 
 def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field_type, ax):
-	rmin, rmax = 0.03*halo_radius, 2*halo_radius
-	bins = np.logspace(np.log10(rmin), np.log10(rmax), 21)  # Radial bin edges
+	rmin, rmax = 0.01*halo_radius, 1*halo_radius
+	bins = np.logspace(np.log10(rmin), np.log10(rmax), 20)  # Radial bin edges
 
 	## g3read.to_spherical returns an array of [r, theta, phi]
 	# Compute particle pos w.r.t. halo center (as a fraction of Rvir)
@@ -294,7 +294,7 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 		if particle_data[this_ptype]['POS '] is not None:
 			distance = g3read.to_spherical(particle_data[this_ptype]['POS '], halo_center).T[0]
 			particle_pos[this_ptype] = distance
-			
+
 			## Create mask for particle outside rmax	
 			mask[this_ptype] = distance < rmax
 		else:
@@ -308,7 +308,6 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 	if ax is None:
 		return binned_field, bin_centers, npart
 	
-#	ipdb.set_trace()	
 	## Hack: need to fix later
 	if field_type == 'cdm':
 		this_ptype = 1
@@ -344,7 +343,7 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 		ax[i].set_xlim(-2*rmax/1e3, 2*rmax/1e3)
 		ax[i].set_ylim(-2*rmax/1e3, 2*rmax/1e3)
 		ax[i].set_aspect('equal')
-
+	
 	return binned_field, bin_centers, npart
 
 
@@ -411,6 +410,7 @@ def _build_hist_bins(pos, bins):
 	bin_pos_sum = np.histogram(pos, weights=pos, bins=bins, density=False)[0]
 	bin_centers = bin_pos_sum/part_per_bin  # Average bin center weighted by number of particles
 	bins_shell = 4./3.*np.pi*(bins[1:]**3 - bins[:-1]**3) 
+	
 
 	return bin_centers, bins_shell, part_per_bin
 
