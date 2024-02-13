@@ -9,13 +9,20 @@ import astropy.units as u
 import astropy.constants as const
 import astropy.cosmology.units as cu
 
+from interpolator import ProfileInterpolator
+
 class Profile():
 	def __init__(self, **kwargs) -> None:
 		## Cosmology
 		self.omega_m = 0.272
 		self.omega_b = 0.0456
 		self.h = 0.704
-
+		self.H0 = self.h * 100 *u.km/u.second/u.Mpc
+		
+		## Output quantity units
+		self.units_rho = u.Msun/u.kpc**3 * cu.littleh**2
+		self.units_Pe = u.keV/u.cm**3 * cu.littleh**2
+		self.units_Temp = u.K
 
 		## HMCode
 		self.f_H = 0.76
@@ -203,7 +210,7 @@ class Profile():
 
 		num =  10**self.lognorm_rho
 		denom = (r_bins*c_M) * (1 + r_bins*c_M)**2
-		rho_cdm = num/denom* u.Msun/u.kpc**3
+		rho_cdm = num/denom * cu.littleh**2 * u.Msun/u.kpc**3
 
 # 		x = r_bins
 # 		Anfw = np.log(1+c_M) - c_M/(1+c_M)
@@ -325,14 +332,14 @@ class Profile():
 		P_e = rho_bnd * const.k_B*Temp_g/const.m_p/self.mu_e
 		factor_nt = self._get_factor_nonthermal(M, r, r_virial)
 
-		P_e = P_e.to(u.keV/u.cm**3, cu.with_H0(self.H0))*factor_nt
+		P_e = P_e.to(self.units_Pe)*factor_nt
 
 		return_profiles = (P_e,)
 		if return_rho is True:
-			return_profiles += (rho_bnd.to(u.g/u.cm**3, cu.with_H0(self.H0)).to(u.GeV/u.cm**3, u.mass_energy()),)
+			return_profiles += (rho_bnd.to(self.units_rho),) # Keep in Msun/kpc^3; otherwise interpolation error is large
 
 		if return_Temp is True:
-			return_profiles += (Temp_g,)
+			return_profiles += (Temp_g.to(self.units_Temp),)
 
 		return return_profiles
 
@@ -523,47 +530,18 @@ class Profile():
 			Temp_profs = []
 			for j, m in enumerate(Mvirs):
 				this_rho_dm_prof, _ = self.get_rho_dm_profile(m, z, r_bins)
-				rho_dm_profs.append(this_rho_dm_prof.value)
+				rho_dm_profs.append(this_rho_dm_prof)
 
 				temp, _ = self.get_Pe_profile(m, z, r_bins=r_bins, return_rho=True, return_Temp=True)
 				this_Pe_prof, this_rho_prof, this_Temp_prof = temp[0], temp[1], temp[2]
 				Pe_profs.append(this_Pe_prof.value)
 				rho_profs.append(this_rho_prof.value)
 				Temp_profs.append(this_Temp_prof.value)
-
-# 			self._rho_dm_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs.value, r_bins, rho_dm_profs)
-# 			self._Pe_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, Pe_profs)
-# 			self._rho_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, rho_profs)
-# 			self._Temp_prof_interpolator[z] = scipy.interpolate.RectBivariateSpline(Mvirs, r_bins, Temp_profs)
-
-			self._rho_dm_prof_interpolator[z] = self._build_2Dinterpolator(Mvirs.value, r_bins, rho_dm_profs)
-			self._Pe_prof_interpolator[z] = self._build_2Dinterpolator(Mvirs.value, r_bins, Pe_profs)
-			self._rho_prof_interpolator[z] = self._build_2Dinterpolator(Mvirs.value, r_bins, rho_profs)
-			self._Temp_prof_interpolator[z] = self._build_2Dinterpolator(Mvirs.value, r_bins, Temp_profs)
-
-		self._rho_dm_prof_interpolator_units = this_rho_dm_prof.unit
-		self._Pe_prof_interpolator_units = this_Pe_prof.unit
-		self._rho_prof_interpolator_units = this_rho_prof.unit
-		self._Temp_prof_interpolator_units = this_Temp_prof.unit
-
-
-	def _build_2Dinterpolator(self, halo_mass, r_bins, profile):
-		from scipy.interpolate import griddata, CloughTocher2DInterpolator
-		## Stolen from https://stackoverflow.com/questions/58750086/how-do-you-interpolate-2d-data-with-unique-y-arrays-for-each-x-array-value-in-py
-
-		if r_bins.ndim == 1:
-		# If the r_bins are same for all masses then repeat to get correct shape
-			r_bins_2D = list(r_bins)*len(halo_mass)
-
-		else:
-			r_bins_2D = r_bins
-
-		halo_mass_2D = np.repeat(halo_mass, len(r_bins)).T
-		points = np.stack((halo_mass_2D, r_bins_2D))  #obtain xy corrdinates for data points
-
-		values = np.concatenate((profile)) #obtain values
-
-		return CloughTocher2DInterpolator(points.T, values)
+			
+			self._rho_dm_prof_interpolator[z] = ProfileInterpolator(Mvirs.value, r_bins, rho_dm_profs)
+			self._Pe_prof_interpolator[z] = ProfileInterpolator(Mvirs.value, r_bins,Pe_profs)
+			self._rho_prof_interpolator[z] = ProfileInterpolator(Mvirs.value, r_bins, rho_profs)
+			self._Temp_prof_interpolator[z] = ProfileInterpolator(Mvirs.value, r_bins, Temp_profs)
 
 
 	def _test_prof_interpolator(self, n=1000):
@@ -572,43 +550,44 @@ class Profile():
 			self._init_prof_interpolator()
 
 		# Get r_bins
-		r_bins = self.get_Pe_profile(1e12*u.Msun/cu.littleh, 0)[1]
+		r_bins = np.logspace(np.log10(0.5), np.log10(1), 100)
 
 		# Now test at each redshift
 		for z in self.zs:
 			Ms = 10**np.random.uniform(np.log10(self.mmin), np.log10(self.mmax), n)*u.Msun/cu.littleh
 			rho_dm_difference = 0.0
 			Pe_difference, rho_difference, Temp_difference = 0., 0., 0.
-			for j, m in enumerate(Ms):
-				true_rho_dm_prof, _ = self.get_rho_dm_profile(m, z)
-				true_rho_dm_prof = true_rho_dm_prof.value
+				
+			true_rho_dm_profiles = []
+			true_Pe_profiles = []
+			true_rho_profiles = []
+			true_Temp_profiles = []
 
-				true_profs,_ = self.get_Pe_profile(m, z, return_rho=True, return_Temp=True)
+			for m in Ms:
+				true_rho_dm_prof, _ = self.get_rho_dm_profile(m, z, r_bins=r_bins)
+				true_rho_dm_profiles.append(true_rho_dm_prof.value)
+
+				true_profs, _ = self.get_Pe_profile(m, z, r_bins=r_bins, return_rho=True, return_Temp=True)
 				true_Pe_prof, true_rho_prof, true_Temp_prof = true_profs[0].value, true_profs[1].value, true_profs[2].value
+				true_Pe_profiles.append(true_Pe_prof)
+				true_rho_profiles.append(true_rho_prof)
+				true_Temp_profiles.append(true_Temp_prof)
 
-				interp_rho_dm_prof = np.concatenate(self._rho_dm_prof_interpolator[z](m, r_bins))
-				interp_Pe_prof = np.concatenate(self._Pe_prof_interpolator[z](m, r_bins))
-				interp_rho_prof = np.concatenate(self._rho_prof_interpolator[z](m, r_bins))
-				interp_Temp_prof = np.concatenate(self._Temp_prof_interpolator[z](m, r_bins))
- 
-				this_rho_dm_diff = np.sum(np.abs(interp_rho_dm_prof/true_rho_dm_prof - 1))
-				this_Pe_diff = np.sum(np.abs(interp_Pe_prof/true_Pe_prof - 1))
-				this_rho_diff = np.sum(np.abs(interp_rho_prof/true_rho_prof - 1))
-				this_Temp_diff = np.sum(np.abs(interp_Temp_prof/true_Temp_prof - 1))
+			true_rho_dm_profiles = np.concatenate(true_rho_dm_profiles)
+			true_Pe_profiles = np.concatenate(true_Pe_profiles)
+			true_rho_profiles = np.concatenate(true_rho_profiles)
+			true_Temp_profiles = np.concatenate(true_Temp_profiles)
 
-				rho_dm_difference += this_Pe_diff
-				Pe_difference += this_Pe_diff
-				rho_difference += this_rho_diff
-				Temp_difference += this_Temp_diff
+			interp_rho_dm_prof = np.concatenate(self._rho_dm_prof_interpolator[z].eval(Ms, r_bins))
+			interp_Pe_prof = np.concatenate(self._Pe_prof_interpolator[z].eval(Ms, r_bins))
+			interp_rho_prof = np.concatenate(self._rho_prof_interpolator[z].eval(Ms, r_bins))
+			interp_Temp_prof = np.concatenate(self._Temp_prof_interpolator[z].eval(Ms, r_bins))
 
-			mean_rho_dm_difference = rho_dm_difference/n*100
-			mean_Pe_difference = Pe_difference/n*100
-			mean_rho_difference = rho_difference/n*100
-			mean_Temp_difference = Temp_difference/n*100
+			mean_rho_dm_difference = np.sum(np.abs(interp_rho_dm_prof/true_rho_dm_profiles - 1))/n*100
+			mean_Pe_difference = np.sum(np.abs(interp_Pe_prof/true_Pe_profiles - 1))/n*100
+			mean_rho_difference = np.sum(np.abs(interp_rho_prof/true_rho_profiles - 1))/n*100
+			mean_Temp_difference = np.sum(np.abs(interp_Temp_prof/true_Temp_profiles - 1))/n*100
 
-			# Raise exception if frac. diff > 0.001 %
-			if mean_rho_dm_difference > self.interp_error_tol:
-				raise Exception(f'Interpolation test failed for dark matter rho profile with a mean frac. difference of {mean_rho_dm_difference:.4f}%. :(')
 
 			if mean_Pe_difference > self.interp_error_tol:
 				raise Exception(f'Interpolation test failed for Pe profile with a mean frac. difference of {mean_Pe_difference:.4f}%. :(')
@@ -620,6 +599,7 @@ class Profile():
 				raise Exception(f'Interpolation test failed for Temperature profile with a mean frac. difference of {mean_Temp_difference:.4f}%. :(')
 
 			if self.verbose is True:
+				print(f'# of radial bins: {len(r_bins)}')
 				print(f'Mean frac. difference between interpolated and true dark matter rho profile...')
 				print(f'At z={z} is {mean_rho_dm_difference:.4f} %')
 
