@@ -18,9 +18,8 @@ class ProfileInterpolator():
 		eval: Evaluate the interpolated profiles for the given halo masses and radial bins.
 	"""
 
-	def __init__(self, mass, rbins, profile, profile_unit, mass_unit=u.Msun/cu.littleh):
+	def __init__(self, mass, rbins, profile, mass_unit=u.Msun/cu.littleh):
 		self.mass_unit = mass_unit
-		self.profile_unit = profile_unit
 		self.interpolator = self._build_2Dinterpolator(mass, rbins, profile)
 
 	def _build_2Dinterpolator(self, halo_mass, rbins, profile):
@@ -79,4 +78,4 @@ class ProfileInterpolator():
 			else:
 				interp_profiles = interp_profiles.reshape(np.array(rbins).shape)
 
-			return [interp_profiles]
+			return interp_profiles
