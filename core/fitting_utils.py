@@ -35,27 +35,33 @@ def get_halo_data(halo, field, r_bins, return_sigma=False, remove_outlier=True):
 	if field=='rho_dm':
 		r = halo['fields']['cdm'][1]/halo['rvir']
 		profile = halo['fields']['cdm'][0]
-		sigma_lnprof = halo['fields']['cdm'][3]
+		npart = halo['fields']['cdm'][2]
+		sigma_prof = profile/npart**0.5
+		sigma_lnprof = sigma_prof/profile
 
 	if field=='Pe':
 		r = halo['fields']['Pe_Mead'][1]/halo['rvir']
 		profile = halo['fields']['Pe_Mead'][0]
 		sigma_lnprof = halo['fields']['Pe'][3]
 
+
 	elif field=='rho':
 		r = halo['fields']['gas'][1]/halo['rvir']
 		profile = halo['fields']['gas'][0]
-		sigma_lnprof = halo['fields']['gas'][3]
+		npart = halo['fields']['gas'][2]
+		sigma_prof = profile/npart**0.5
+		sigma_lnprof = sigma_prof/profile
 
 	elif field=='Temp':
 		r = halo['fields']['Temp'][1]/halo['rvir']
 		profile = halo['fields']['Temp'][0]
 		sigma_lnprof = halo['fields']['Temp'][3]
 
-	elif field=='v_disp':
-		r = halo['fields']['v_disp'][1]/halo['rvir']
-		profile = halo['fields']['v_disp'][0]
-		sigma_lnprof = halo['fields']['v_disp'][3]
+
+# 	elif field=='v_disp':
+# 		r = halo['fields']['v_disp'][1]/halo['rvir']
+# 		profile = halo['fields']['v_disp'][0]
+# 		sigma_lnprof = halo['fields']['v_disp'][3]
 
 	#Rescale prof to get intr. scatter
 	rescale_value = nan_interp(r, profile)(1)
