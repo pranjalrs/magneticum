@@ -2,9 +2,9 @@ import numpy as np
 
 import camb
 from classy import Class
-import pyhmcode
 import Pk_library as PKL
-import hmcode  # HMCode-Python
+import hmcode  # This is the full Python implementation of the Fortran HMCode
+import pyhmcode  # This the Python wrapper for the Fortran HMCode
 
 def get_CLASS_Pk(k_sim, input_dict=None, binned=False, z=0.0):
 	'''Returns Pk for WMAP7 cosmology, optionally a dictionary of cosmo
@@ -66,59 +66,28 @@ def get_CLASS_Pk(k_sim, input_dict=None, binned=False, z=0.0):
 
 	return Pnl, kvec
 
-def get_pyHMCode_Pk(set_cosmo=None, z=[0.], fields=None, return_halo_terms=False, **kwargs):
-	# Cosmological parameters
-	cosmo_dict = {'h': 0.704,
-				'omb': 0.0456,
-				'omc': 0.272 - 0.0456,
-				'mnu': 0.0,
-				'w': -1.0,
-				'wa': 0.0,
-				'ns': 0.963,
-				'sigma8': 0.809,
-				'As': 1.7318e-9 } # This is updated to match sigma8 later
-	
+def get_pyHMCode_Pk(camb_pars=None, z=[0.], fields=None, return_halo_terms=False, **kwargs):
+	'''
+	Calculate the nonlinear matter power spectrum using the HMcode.
 
-	if set_cosmo is not None:
-		for key in set_cosmo:
-			cosmo_dict[key] = set_cosmo[key]
+	Parameters:
+	- camb_pars (optional): CAMB parameters used to compute the linear matter power spectrum.
+	- z (list): Redshifts at which to compute the power spectrum.
+	- fields (optional): List of fields to include in the calculation.
+	- return_halo_terms (bool): Whether to return the halo terms in addition to the total power spectrum.
+	- **kwargs: Additional keyword arguments to customize the HMcode calculation.
 
-	# Wavenumber [h/Mpc]
-	k_max = 200.
+	Returns:
+	- Pk_hm (array): The total nonlinear matter power spectrum.
+	- ks (array): The wavenumbers corresponding to the power spectrum.
 
-	# Get linear power spectrum from CAMB
-	camb_pars = camb.CAMBparams(WantTransfer=True, 
-						WantCls=False, 
-						Want_CMB_lensing=False, 
-						DoLensing=False,
-						NonLinearModel=camb.nonlinear.Halofit(halofit_version='mead2020'),
-					   )
-	camb_pars.set_cosmology(H0=cosmo_dict['h']*100., omch2=cosmo_dict['omc']*cosmo_dict['h']**2, 
-					ombh2=cosmo_dict['omb']*cosmo_dict['h']**2, mnu=cosmo_dict['mnu'])
-	camb_pars.set_dark_energy(w=cosmo_dict['w'], wa=cosmo_dict['wa'])
-	camb_pars.set_initial_power(camb.InitialPowerLaw(As=cosmo_dict['As'], ns=cosmo_dict['ns']))
-	camb_pars.set_matter_power(redshifts=z, kmax=k_max, nonlinear=True)
-
+	If return_halo_terms is True, the function also returns:
+	- Pk_hm_1halo (array): The 1-halo term of the power spectrum.
+	- Pk_hm_2halo (array): The 2-halo term of the power spectrum.
+	'''
 	# Compute CAMB results
-	r = camb.get_results(camb_pars)
+	r = camb.get_results(camb_pars, z)
 	ks, zs, Pk_lin = r.get_linear_matter_power_spectrum(nonlinear=False)
-
-	# HMcode stuff
-	# Need sigma_8 from CAMB as this is HMcode internal parameter
-	
-	sigma_8_init = r.get_sigma8_0()
-	print('Running CAMB')
-	print('Initial sigma_8:', sigma_8_init)
-	print('Desired sigma_8:', cosmo_dict['sigma8'])
-	scaling = (cosmo_dict['sigma8']/sigma_8_init)**2
-	As = cosmo_dict['As'] * scaling
-	camb_pars.InitPower.set_params(As=As, ns=cosmo_dict['ns'], r=0.)
-
-	## Update matter power spectrum for new sigma8
-	r = camb.get_results(camb_pars)
-	ks, zs, Pk_lin = r.get_linear_matter_power_spectrum(nonlinear=False)
-	sigma_8 = r.get_sigma8_0()
-	print('Final sigma_8:', sigma_8)
 
 	# Need these Omegas
 	# Note that the calculation of Omega_v is peculiar, but ensures flatness in HMcode
@@ -135,8 +104,12 @@ def get_pyHMCode_Pk(set_cosmo=None, z=[0.], fields=None, return_halo_terms=False
 	c.om_v = omv
 	c.h = camb_pars.h
 	c.ns = camb_pars.InitPower.ns
-	c.sig8 = sigma_8
-	c.m_nu = cosmo_dict['mnu']
+	c.sig8 = r.get_sigma8_0()
+
+	if r.num_nu_massive == 0.0:
+		c.m_nu = 0.0
+	else:
+		raise NotImplementedError('Setting massive neutrinos is not implemented yet')
 
 	# Set the linear power spectrum for HMcode
 	c.set_linear_power_spectrum(ks, zs, Pk_lin)
@@ -163,27 +136,7 @@ def get_suppresion_hmcode(input_cosmo=None, zs=[0.], T_AGNs=None):
 	'''Matter power supression based on hmcode-the full Python
 	implementation of the Fortran HMCode.
 	'''
-	# default cosmology is WMAP7
-	Omega_b = 0.0456
-	Omega_c = 0.272 - Omega_b
-	Omega_k = 0.0
-	h = 0.704
-	ns = 0.963
-	sigma_8 = 0.809
-	w0 = -1.
-	wa = 0.
-	m_nu = 0.
-	norm_sigma8 = True
-	As = 2e-9
-
-	if input_cosmo is not None:
-		Omega_b = input_cosmo['Ob0']
-		Omega_c = input_cosmo['Om0'] - input_cosmo['Ob0']
-		h = input_cosmo['H0']/100
-		sigma_8 = input_cosmo['sigma8']
-
-	# CAMB
-	kmax_CAMB = 200.
+	zs = np.array(zs)
 
 	# Wavenumbers [h/Mpc]
 	kmin, kmax = 1e-3, 3e1
@@ -195,15 +148,70 @@ def get_suppresion_hmcode(input_cosmo=None, zs=[0.], T_AGNs=None):
 		T_AGNs = np.power(10, np.array([7.6, 7.8, 8.0, 8.3]))
 
 	# Redshifts
-	zs = np.array(zs)
 
-	# Halo masses [Msun/h] (for halo model only)
-	Mmin, Mmax = 1e0, 1e18
-	nM = 256
-	M = np.logspace(np.log10(Mmin), np.log10(Mmax), nM)
+	camb_results  = build_CAMB_cosmology(input_cosmo=input_cosmo, zs=zs)
+
+	Pk_lin_interp = camb_results.get_matter_power_interpolator(nonlinear=False).P
+	Pk_nonlin_interp = camb_results.get_matter_power_interpolator(nonlinear=True).P
+
+	# Arrays for CAMB non-linear spectrum
+	Pk_CAMB = np.zeros((len(zs), len(k)))
+	for iz, z in enumerate(zs):
+		Pk_CAMB[iz, :] = Pk_nonlin_interp(z, k)
+
+	Rk_feedback = []
+	for T_AGN in T_AGNs:
+		Pk_feedback = hmcode.power(k, zs, camb_results, T_AGN=T_AGN, verbose=False)
+		Pk_gravity = hmcode.power(k, zs, camb_results, T_AGN=None)
+		Rk = Pk_feedback/Pk_gravity
+		Rk_feedback.append(Rk)
+
+	return Rk_feedback, k
+
+# Halo masses [Msun/h] (for halo model only)
+Mmin, Mmax = 1e0, 1e18
+nM = 256
+M = np.logspace(np.log10(Mmin), np.log10(Mmax), nM)
+
+def build_CAMB_cosmology(input_cosmo=None, zs=[0.]):
+	'''
+	Builds a cosmology using the CAMB library.
+
+	Parameters:
+		input_cosmo (dict): Dictionary containing input cosmological parameters.
+							If None, default cosmological parameters are used.
+							Default is None.
+		zs (list): List of redshifts at which to calculate the linear matter power spectrum.
+				   Default is [0.].
+
+	Returns:
+		results: The results object obtained from running CAMB with the specified cosmological parameters.
+	'''
+	# default cosmology is WMAP7
+	Omega_b = 0.0456
+	Omega_c = 0.272 - Omega_b
+	Omega_k = 0.0
+	h = 0.704
+	ns = 0.963
+	sigma_8 = 0.809
+	w0 = -1.
+	wa = 0.
+	m_nu = 0.
+	set_sigma8 = True
+	As = 2e-9
+
+	if input_cosmo is not None:
+		Omega_b = input_cosmo['Ob0']
+		Omega_c = input_cosmo['Om0'] - input_cosmo['Ob0']
+		h = input_cosmo['H0']/100
+		sigma_8 = input_cosmo['sigma8']
+
+	# CAMB
+	kmax_CAMB = 200.
 
 	# Sets cosmological parameters in camb to calculate the linear power spectrum
-	pars = camb.CAMBparams(WantCls=False)
+	pars = camb.CAMBparams(WantTransfer=True, WantCls=False, Want_CMB_lensing=False, 
+						DoLensing=False, NonLinearModel=camb.nonlinear.Halofit(halofit_version='mead2020'))
 	wb, wc = Omega_b*h**2, Omega_c*h**2
 
 	# This function sets standard and helium set using BBN consistency
@@ -214,7 +222,7 @@ def get_suppresion_hmcode(input_cosmo=None, zs=[0.], T_AGNs=None):
 	Omega_m = pars.omegam # Extract the matter density
 
 	# Scale 'As' to be correct for the desired 'sigma_8' value if necessary
-	if norm_sigma8:
+	if set_sigma8:
 		results = camb.get_results(pars)
 		sigma_8_init = results.get_sigma8_0()
 		print('Running CAMB')
@@ -224,26 +232,14 @@ def get_suppresion_hmcode(input_cosmo=None, zs=[0.], T_AGNs=None):
 		As *= scaling
 		pars.InitPower.set_params(As=As, ns=ns, r=0.)
 
-	# Run
-	results = camb.get_results(pars)
-	Pk_lin_interp = results.get_matter_power_interpolator(nonlinear=False).P
-	Pk_nonlin_interp = results.get_matter_power_interpolator(nonlinear=True).P
 	sigma_8 = results.get_sigma8_0()
 	print('Final sigma_8:', sigma_8)
 
-	# Arrays for CAMB non-linear spectrum
-	Pk_CAMB = np.zeros((len(zs), len(k)))
-	for iz, z in enumerate(zs):
-		Pk_CAMB[iz, :] = Pk_nonlin_interp(z, k)
+	# Run
+	results = camb.get_results(pars)
 
-	Rk_feedback = []
-	for T_AGN in T_AGNs:
-		Pk_feedback = hmcode.power(k, zs, results, T_AGN=T_AGN, verbose=False)
-		Pk_gravity = hmcode.power(k, zs, results, T_AGN=None)
-		Rk = Pk_feedback/Pk_gravity
-		Rk_feedback.append(Rk)
+	return results
 
-	return Rk_feedback, k
 
 def get_Pk_Pylians(cube, box_size, calc_delta, MAS, savefile=None):
 	if calc_delta is False:
