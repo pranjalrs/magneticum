@@ -269,7 +269,7 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 			profile, r, npart = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, ax[i])
 
 		else:
-			profile, r, npart = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, z, little_h, estimator)
+			profile, r, npart = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, estimator)
 
 		profiles_dict[field][0] = profile
 		profiles_dict[field][1] = r
