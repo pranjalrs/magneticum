@@ -518,7 +518,7 @@ def get_fgas_halo(snap_base, halo_center, radius, z, little_h):
 
 
 def get_cosmology_dict_from_path(path):
-	if 'mr_bao' in path or 'hr_bao' in path or 'mr_dm' in path:
+	if 'mr_bao' in path or 'hr_bao' in path or 'mr_dm' in path or 'hr_dm' in path:
 		Om0, Ob0, sigma8, h = 0.272, 0.0456, 0.809, 0.704
 
 	elif 'hr' in path:
