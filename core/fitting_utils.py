@@ -31,8 +31,21 @@ def update_sigma_intr(val1, val2):
 	sigma_intr_rho = val2
 
 
-def get_halo_data(halo, field, r_bins, return_sigma=False, remove_outlier=True):
-	if field=='rho_dm':
+def get_halo_data(halo, field, return_sigma=False):
+	"""
+	Get halo data for a given field.
+	For rho_dm, Pe, rho the uncertainty is calculated as sigma = mu/Npart**0.5=profile/Npart**0.5
+	the uncertainty in log profile is calculated as sigma_lnprof = sigma/mu= sigma/profile
+	Parameters:
+		halo (dict): Dictionary containing halo data.
+		field (str): Field name.
+		return_sigma (bool, optional): Whether to return sigma values. Default is False.
+
+	Returns:
+		tuple: Tuple containing profile, r, profile_rescale, sigma_prof, and sigma_lnprof (if return_sigma is True),
+			   or profile, r, and profile_rescale (if return_sigma is False).
+	"""
+	if field=='dm':
 		r = halo['fields']['cdm'][1]/halo['rvir']
 		profile = halo['fields']['cdm'][0]
 		npart = halo['fields']['cdm'][2]
@@ -42,10 +55,13 @@ def get_halo_data(halo, field, r_bins, return_sigma=False, remove_outlier=True):
 	if field=='Pe':
 		r = halo['fields']['Pe_Mead'][1]/halo['rvir']
 		profile = halo['fields']['Pe_Mead'][0]
+		npart = halo['fields']['Pe_Mead'][2]
 		sigma_lnprof = halo['fields']['Pe'][3]
+		profile = halo['fields']['cdm'][0]
+		sigma_prof = profile/npart**0.5
+		sigma_lnprof = sigma_prof/profile
 
-
-	elif field=='rho':
+	elif field=='gas':
 		r = halo['fields']['gas'][1]/halo['rvir']
 		profile = halo['fields']['gas'][0]
 		npart = halo['fields']['gas'][2]
@@ -53,41 +69,25 @@ def get_halo_data(halo, field, r_bins, return_sigma=False, remove_outlier=True):
 		sigma_lnprof = sigma_prof/profile
 
 	elif field=='Temp':
-		r = halo['fields']['Temp'][1]/halo['rvir']
-		profile = halo['fields']['Temp'][0]
-		sigma_lnprof = halo['fields']['Temp'][3]
+		raise NotImplementedError
+		# r = halo['fields']['Temp'][1]/halo['rvir']
+		# profile = halo['fields']['Temp'][0]
+		# sigma_lnprof = halo['fields']['Temp'][3]
 
-
-# 	elif field=='v_disp':
-# 		r = halo['fields']['v_disp'][1]/halo['rvir']
-# 		profile = halo['fields']['v_disp'][0]
-# 		sigma_lnprof = halo['fields']['v_disp'][3]
+	elif field=='v_disp':
+		raise NotImplementedError
+#         r = halo['fields']['v_disp'][1]/halo['rvir']
+#         profile = halo['fields']['v_disp'][0]
+#         sigma_lnprof = halo['fields']['v_disp'][3]
 
 	#Rescale prof to get intr. scatter
 	rescale_value = nan_interp(r, profile)(1)
 	profile_rescale = (profile/ rescale_value)
-	profile_rescale_interp = nan_interp(r, profile_rescale)(r_bins)
-	profile_interp = nan_interp(r, profile)(r_bins)
 
-	if return_sigma is True:
-		sigma_lnprof = sigma_lnprof[3:-3]
-		assert len(sigma_lnprof) == len(r_bins)
-
-	## Ensure that interpolated/rescaled profiles are not ill-behaved
-	if np.any(profile_rescale<0) or np.any(profile_interp<0) or np.all(np.log(profile_rescale)<0):
-		if return_sigma is True:
-			return None, None, None
-		return None, None
-
-	elif np.any(profile_interp[:10]<0.9*profile_interp[-1]) and remove_outlier is True:
-		if return_sigma is True:
-			return None, None, None
-		return None, None
-
+	if return_sigma:
+		return profile, r, profile_rescale, sigma_prof, sigma_lnprof
 	else:
-		if return_sigma is True:
-			return profile_interp, profile_rescale_interp, sigma_lnprof
-		return profile_interp, profile_rescale_interp
+		return profile, r, profile_rescale
 
 
 def likelihood(theory_prof, field):
