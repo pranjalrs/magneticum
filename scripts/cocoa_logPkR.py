@@ -33,18 +33,18 @@ def get_logPkR(PkR, k):
 def numpy_to_c_array(Pk, k, C):
     size = k.size
     c_array = f'static double logkBins_Magneticum_{C}[{len(k_new)}] ='
-    c_array += '{'
+    c_array += ' {'
     c_array += ', '.join([str(k[i]) for i in range(size)])
     c_array += '};'
 
     # Now convert the 2D Pk array
     rows, cols = Pk.shape
-    c_array += '\n '
+    c_array += '\n'
     c_array += f'static double logPkR_Magneticum_{C}[{len(k_new)}][{len(zs)}] ='
     c_array += '{'
 
     for row in range(rows):
-        c_array += '{'
+        c_array += ' {'
         c_array += ', '.join([str(Pk[row, col]) for col in range(cols)])
         c_array += '},\n'
     
