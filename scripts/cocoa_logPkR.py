@@ -32,7 +32,7 @@ def get_logPkR(PkR, k):
 
 def numpy_to_c_array(Pk, k, C):
     size = k.size
-    c_array = f'static double logkBins_Mag{C}[{len(k_new)}] ='
+    c_array = f'static double logkBins_Magneticum_{C}[{len(k_new)}] ='
     c_array += '{'
     c_array += ', '.join([str(k[i]) for i in range(size)])
     c_array += '};'
@@ -40,7 +40,7 @@ def numpy_to_c_array(Pk, k, C):
     # Now convert the 2D Pk array
     rows, cols = Pk.shape
     c_array += '\n '
-    c_array += f'static double logPkR_Mag{C}[{len(k_new)}][{len(zs)}] ='
+    c_array += f'static double logPkR_Magneticum_{C}[{len(k_new)}][{len(zs)}] ='
     c_array += '{'
 
     for row in range(rows):
@@ -103,9 +103,10 @@ for f in files:
     
     cosmo_snaps = sorted(glob.glob(f+f'Pk_{sim}_z=*_R1024.txt'), reverse=True)
 
-    logPkRs = np.zeros((len(k_new), len(cosmo_snaps)))
+    logPkRs = np.zeros((len(k_new), 10))
     zs = []
-    for i, snap in enumerate(cosmo_snaps):
+    idx = 0
+    for snap in cosmo_snaps:
         match = re.search(r'z=([0-9.]+)', snap.split('/')[-1])
         z = match.group(1)
         
@@ -127,8 +128,8 @@ for f in files:
         PkR = Pk_hydro[:, 1]/Pk_dm[:, 1]
         k = Pk_hydro[:, 0]
 
-        logPkRs[:, i] = get_logPkR(PkR, k)
-        
+        logPkRs[:, idx] = get_logPkR(PkR, k)
+        idx += 1
 #         ipdb.set_trace()
         zs.append(z)
     
