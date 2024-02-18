@@ -392,7 +392,13 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask):
 		binned_Pe = np.histogram(these_pos, weights=Pe.value, bins=bins, density=False)[0]
 		return Pe.value, binned_Pe*Pe.unit, bin_centers, part_per_bin
 
+	if field_type == 'Temp':
+		ptype = 0  # For gas
+		these_pos = particle_pos[ptype][mask[ptype]]
+		mass = particle_data[ptype]['MASS'][mask[ptype]]
+		Temp = particle_data[ptype]['TEMP'][mask[ptype]]
 
+		Temp = particle_data[ptype]['TEMP'][mask[pytpe]]*Gadget.units.Temperature
 def _build_hist_bins(pos, bins):
 	"""
 	Build histogram for a given set of particle positions and bins. 
