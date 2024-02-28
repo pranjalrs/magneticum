@@ -1,12 +1,15 @@
 import numpy as np
+import scipy
 from scipy.special import sici
 
 import camb
-from classy import Class
-import Pk_library as PKL
-import hmcode  # This is the full Python implementation of the Fortran HMCode
-import pyhmcode  # This the Python wrapper for the Fortran HMCode
+# from classy import Class
+# import Pk_library as PKL
+# import hmcode  # This is the full Python implementation of the Fortran HMCode
+# import pyhmcode  # This the Python wrapper for the Fortran HMCode
 import pyhalomodel
+
+import ipdb
 
 def get_CLASS_Pk(k_sim, input_dict=None, binned=False, z=0.0):
 	'''Returns Pk for WMAP7 cosmology, optionally a dictionary of cosmo
@@ -257,12 +260,12 @@ def get_halomodel_Pk(input_cosmo={}, z=0., settings={}):
 	cM_relation_name = settings.get('cM_relation_name', 'Ragagnin et al. (2023)')
 	marginalize_cM_scatter = settings.get('marginalize_cM_scatter', True)
 
-	print(f'Using delta_v = {Dv} (Bryan & Norman 1998 with Omega_m=0.3)')
-	print(f'using {mass_function_name} mass function')
+	# print(f'Using delta_v = {Dv} (Bryan & Norman 1998 with Omega_m=0.3)')
+	# print(f'using {mass_function_name} mass function')
 	print(f'Using concentration mass relation from {cM_relation_name}')
 	print('Marginalize over c-M scatter:', marginalize_cM_scatter)
 
-	Omega_m = camb_results.omegam
+	Omega_m = camb_results.Params.omegam
 	hmod = pyhalomodel.model(z, Omega_m, name=mass_function_name, Dv=Dv, verbose=True)
 
 	# Get sigma(R) from CAMB
@@ -270,7 +273,7 @@ def get_halomodel_Pk(input_cosmo={}, z=0., settings={}):
 	sigmaRs = camb_results.get_sigmaR(Rs, hubble_units=True, return_R_z=False)[[z].index(z)]
 
 	rvs = hmod.virial_radius(Ms)
-	cs, sigma_lnc = get_concentration_mass_relation(Ms, z, cM_relation_name)
+	cs, sigma_lnc = get_concentration_mass_relation(Ms, z, cM_relation_name, return_scatter=True)
 	
 	# Create NFW profile
 	Uk = win_NFW(ks, rvs, cs)
@@ -278,12 +281,42 @@ def get_halomodel_Pk(input_cosmo={}, z=0., settings={}):
 
 	# Marginalize over c-M relation scatter
 	if marginalize_cM_scatter:
-		
+		# Now we want to integrate over the scatter in the concentration-mass relation
+		# Using the lognormal distribution, for each halo mass
+		# Set up finer 1d grids for integration
+		nsize = 1000  # Number of points for the integration
+		mass_array = np.logspace(5, 50, nsize)  # between 1e5 and 1e20 Msun/h
+		rvirial_array = hmod.virial_radius(mass_array)
+		concentration_array = get_concentration_mass_relation(mass_array, z, cM_relation_name)
+		Uk_grid = win_NFW(ks, rvirial_array, concentration_array) # shape is (k, M)
+
+		concentration_grid = np.repeat(np.atleast_2d(concentration_array), ks.size, axis=0) # shape is (k, M)
+		Uk = np.zeros(shape=(ks.size, cs.size))
+
+		for i, this_cbar in enumerate(cs):
+			# Compute the lognormal distribution
+			ln_c_pdf = lognormal_pdf(concentration_grid, np.log(this_cbar), sigma_lnc)
+
+			integrand = Uk_grid**2 * ln_c_pdf
+
+			# Need to flip so that the grid is in increasing order
+			# Otherwise integration is negative
+			Uk[:, i] = np.trapz(np.flip(integrand, axis=1), np.flip(concentration_grid, axis=1), axis=1)**0.5
+	else:
+		Uk = win_NFW(ks, rvs, cs)
+
 
 
 	matter_profile = pyhalomodel.profile.Fourier(ks, Ms, Uk, amplitude=Ms, normalisation=hmod.rhom, mass_tracer=True) 
 
-	# Compute halo model power spectrum
+	# Get linear matter power spectrum from CAMB
+	Pk_lin_interpolator = camb_results.get_matter_power_interpolator(nonlinear=False)
+	Pk_linear = Pk_lin_interpolator.P(z, ks) # Single out the linear P(k) interpolator and evaluate linear power
+
+	pack = ks, Pk_linear, Ms, sigmaRs
+	Pk_2h, Pk_1h, Pk_hm = hmod.power_spectrum(*pack, {'m': matter_profile})
+
+	return Pk_hm, Pk_2h, Pk_1h, ks
 
 def win_NFW(k, rv, c):
 	'''
@@ -311,7 +344,7 @@ def win_NFW(k, rv, c):
 	return Wk
 
 def lognormal_pdf(x, mu, sigma):
-	norm = (2*np.pi)**0.5 * mu * sigma
+	norm = (2*np.pi)**0.5 * x * sigma
 	return  1/norm * np.exp( - (np.log(x) - mu)**2 / (2 * sigma**2))
 
 def get_concentration_mass_relation(M, z, name, return_scatter=False):
@@ -334,7 +367,12 @@ def get_concentration_mass_relation(M, z, name, return_scatter=False):
 		B = -0.081
 		C = -0.71
 		M0 = 2e12  # Msun/h
-		return A*(M/M0)**B*(1+z)**C
+		sigma_lnc = 0.2
+		c = A*(M/M0)**B*(1+z)**C
+
+		if return_scatter:
+			return c, sigma_lnc
+		return c
 
 	elif name == 'Ragagnin et al. (2023)':
 		# Calirbrated from hydro simulations
