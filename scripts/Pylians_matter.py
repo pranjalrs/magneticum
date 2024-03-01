@@ -6,6 +6,8 @@ import MAS_library as MASL
 import Pk_library as PKL
 import g3read
 
+import ipdb
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--box', default='Box1a', type=str)
 parser.add_argument('--sim', default='mr_bao', type=str)
@@ -29,8 +31,11 @@ def get_mass_cube(delta, ptype):
 				mass = np.array(g3read.read_new(this_file, ['MASS'], [this])[this]['MASS']*1e10)
 
 			elif this==5:
-				mass = np.array(g3read.read_new(this_file, ['BHMA'], [this])[this]['BHMA']*1e10)
-                
+				try:
+					mass = np.array(g3read.read_new(this_file, ['BHMA'], [this])[this]['BHMA']*1e10)
+				except:
+					print(f'Block BHMA not found in file {i}')
+
 			pos, mass = pos.astype('float32'), mass.astype('float32')
 
 			MASL.MA(pos, delta, BoxSize, MAS, W=mass, verbose=verbose)
@@ -69,12 +74,16 @@ if __name__== '__main__':
 	axis = 0
 
 	delta = np.zeros((grid,grid,grid), dtype=np.float32)
-
+	
 	if 'dm' not in sim_name:
 		get_mass_cube(delta, [0, 1, 4, 5])
 
 	else:
-		get_mass_cube(delta, [1, 2])
+		if 'dm_hr' in sim_name:
+			get_mass_cube(delta, [1])
+
+		else:
+			get_mass_cube(delta, [1, 2])
 
 	delta /= np.mean(delta, dtype=np.float64)
 	delta -= 1.0
