@@ -9,28 +9,39 @@ import utils
 
 class PowerSpectrum:
     def __init__(self, path):
-        self._init_power_spectrum(path)
+        self._load_power_spectrum(path)
 
-    def _init_power_spectrum(self, path):
+    def _load_power_spectrum(self, path):
         match = re.search(r'z=([0-9.]+)', path.split('/')[-1])
         z = match.group(1)
         self.z = float(z)
 
-        self.k, self.Pk_hydro = np.loadtxt(self.path, unpack=True)
+        self.k, self.Pk_hydro = self._loadtxt(path, unpack=True)
 
         if 'hr_bao' in path:
-            snap = snap.replace('hr_bao', 'hr_dm')
+            path = path.replace('hr_bao', 'hr_dm')
 
         else:
-            snap = snap.replace('hr', 'dm_hr')
+            path = path.replace('hr', 'dm_hr')
 
-        _, self.Pk_dm = np.loadtxt(self.path, unpack=True)
-
-        self.Pk_ratio = self.Pk_hydro/self.Pk_dm
-
+        _, self.Pk_dm = self._loadtxt(path, unpack=True)
+        
+        if (self.Pk_hydro is not None) and (self.Pk_dm is not None):
+            self.Pk_ratio = self.Pk_hydro/self.Pk_dm
+        
+        else: self.Pk_ratio = None
+    
+    @staticmethod
+    def _loadtxt(path, **kwargs):
+        try:
+            return np.loadtxt(path, **kwargs)
+        
+        except FileNotFoundError:
+            print(f'File not found {path}')
+            return None, None
 
 class Simulation:
-    def __call__(self, sim_name, data_path='./'):
+    def __init__(self, sim_name, data_path='./'):
         
         self.sim_num_map = {
     'hr_0.153_0.0408_0.614_0.666': 'C1',
@@ -52,7 +63,7 @@ class Simulation:
         self.sim_name = sim_name
         self.sim_num = self.sim_num_map[sim_name]
         self._init_cosmology(sim_name)
-        self._get_power_spectrum(sim_name, data_path)
+        self._init_power_spectrum(sim_name, data_path)
 
     def _init_cosmology(self, sim_name):
         cosmo = utils.get_cosmology_dict_from_path(sim_name)
@@ -61,6 +72,8 @@ class Simulation:
         self.sigma8 = cosmo['sigma8']
         self.h = cosmo['H0']/100
         self.fb = cosmo['Ob0']/cosmo['Om0']
+        
+        self.cosmo_label = "$\Omega_m={:.3f},\,\sigma_8={:.3f},\,h={:.3f},f_b={:.3f}$".format(cosmo['Om0'],cosmo['sigma8'],self.h,self.fb)
     
     def _init_power_spectrum(self, sim_name, data_path):
         cosmo_snaps = sorted(glob.glob(f'{data_path}/{sim_name}/Pk_{sim_name}_z=*_R1024.txt'))
