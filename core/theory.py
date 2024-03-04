@@ -1,17 +1,18 @@
 import numpy as np
+import scipy
 from scipy.special import sici
 
 import camb
-from classy import Class
-import Pk_library as PKL
-import hmcode  # This is the full Python implementation of the Fortran HMCode
-import pyhmcode  # This the Python wrapper for the Fortran HMCode
 import pyhalomodel
+
+import ipdb
 
 def get_CLASS_Pk(k_sim, input_dict=None, binned=False, z=0.0):
 	'''Returns Pk for WMAP7 cosmology, optionally a dictionary of cosmo
 	parameters can also be passed
 	'''
+	from classy import Class
+
 	zmax = 0.1
 
 	if z>0.1:
@@ -148,6 +149,8 @@ def get_pyHMCode_Pk(input_cosmo={}, z=[0.], fields=None, return_halo_terms=False
 	- Pk_hm_1halo (array): The 1-halo term of the power spectrum.
 	- Pk_hm_2halo (array): The 2-halo term of the power spectrum.
 	'''
+	import pyhmcode  # This the Python wrapper for the Fortran HMCode
+
 	# Compute CAMB results
 	r = camb.get_results(input_cosmo, z)
 	ks, zs, Pk_lin = r.get_linear_matter_power_spectrum(nonlinear=False)
@@ -199,6 +202,8 @@ def get_suppresion_hmcode(input_cosmo={}, zs=[0.], T_AGNs=None):
 	'''Matter power supression based on hmcode-the full Python
 	implementation of the Fortran HMCode.
 	'''
+	import hmcode  # This is the full Python implementation of the Fortran HMCode
+
 	zs = np.array(zs)
 
 	# Wavenumbers [h/Mpc]
@@ -233,8 +238,56 @@ def get_suppresion_hmcode(input_cosmo={}, zs=[0.], T_AGNs=None):
 
 def get_halomodel_Pk(input_cosmo={}, z=0., settings={}):
 	'''
-	This function will return the power spectrum using pyhalomodel
+	This function calculates the power spectrum using pyhalomodel.
+
+	Parameters:
+	- input_cosmo (dict): Dictionary containing cosmological parameters.
+	- z (float): Redshift value.
+	- settings (dict): Additional settings for the calculation.
+
+	Returns:
+	- Pk_hm (array): Halo model power spectrum.
+	- Pk_2h (array): Two-halo term power spectrum.
+	- Pk_1h (array): One-halo term power spectrum.
+	- ks (array): Wavenumber values.
 	'''
+	setup = setup_halomodel(input_cosmo=input_cosmo, z=z, settings=settings)
+
+	ks = setup['ks']
+	Ms = setup['Ms']
+	rvs = setup['rvs']
+	sigmaRs = setup['sigmaRs']
+	cs = setup['cs']
+	sigma_lnc = setup['sigma_lnc']
+	hmod = setup['hmod']
+	camb_results = setup['camb_results']
+
+	cM_relation_name = settings.get('cM_relation_name', 'Ragagnin et al. (2023)')
+	marginalize_cM_scatter = settings.get('marginalize_cM_scatter', False)
+	print('Marginalize over c-M scatter:', marginalize_cM_scatter)
+
+	# Create NFW profile
+	Uk = win_NFW(ks, rvs, cs)
+
+	# Marginalize over c-M relation scatter
+	if marginalize_cM_scatter:
+		Uk = win_NFW_marginalized(cM_relation_name=cM_relation_name, z=z, **setup)
+
+	else:
+		Uk = win_NFW(ks, rvs, cs)
+
+	matter_profile = pyhalomodel.profile.Fourier(ks, Ms, Uk, amplitude=Ms, normalisation=hmod.rhom, mass_tracer=True) 
+
+	# Get linear matter power spectrum from CAMB
+	Pk_lin_interpolator = camb_results.get_matter_power_interpolator(nonlinear=False)
+	Pk_linear = Pk_lin_interpolator.P(z, ks) # Single out the linear P(k) interpolator and evaluate linear power
+
+	pack = ks, Pk_linear, Ms, sigmaRs
+	Pk_2h, Pk_1h, Pk_hm = hmod.power_spectrum(*pack, {'m': matter_profile})
+
+	return Pk_hm, Pk_2h, Pk_1h, ks
+
+def setup_halomodel(input_cosmo={}, z=0., settings={}):
 	if z!=0.:
 		raise NotImplementedError('Redshifts other than z=0 are not implemented yet')
 
@@ -255,14 +308,12 @@ def get_halomodel_Pk(input_cosmo={}, z=0., settings={}):
 	Dv = settings.get('Dv', 330.)
 	mass_function_name = settings.get('mass_function_name', 'Tinker et al. (2010)')
 	cM_relation_name = settings.get('cM_relation_name', 'Ragagnin et al. (2023)')
-	marginalize_cM_scatter = settings.get('marginalize_cM_scatter', True)
 
-	print(f'Using delta_v = {Dv} (Bryan & Norman 1998 with Omega_m=0.3)')
-	print(f'using {mass_function_name} mass function')
+	# print(f'Using delta_v = {Dv} (Bryan & Norman 1998 with Omega_m=0.3)')
+	# print(f'using {mass_function_name} mass function')
 	print(f'Using concentration mass relation from {cM_relation_name}')
-	print('Marginalize over c-M scatter:', marginalize_cM_scatter)
 
-	Omega_m = camb_results.omegam
+	Omega_m = camb_results.Params.omegam
 	hmod = pyhalomodel.model(z, Omega_m, name=mass_function_name, Dv=Dv, verbose=True)
 
 	# Get sigma(R) from CAMB
@@ -270,20 +321,52 @@ def get_halomodel_Pk(input_cosmo={}, z=0., settings={}):
 	sigmaRs = camb_results.get_sigmaR(Rs, hubble_units=True, return_R_z=False)[[z].index(z)]
 
 	rvs = hmod.virial_radius(Ms)
-	cs, sigma_lnc = get_concentration_mass_relation(Ms, z, cM_relation_name)
-	
-	# Create NFW profile
-	Uk = win_NFW(ks, rvs, cs)
+	cs, sigma_lnc = get_concentration_mass_relation(Ms, z, cM_relation_name, return_scatter=True)
 
+	setup = {'ks':ks, 'Ms':Ms, 'rvs':rvs, 'sigmaRs':sigmaRs, 
+		  'cs':cs, 'sigma_lnc': sigma_lnc,
+		  'hmod':hmod, 'camb_results':camb_results}
 
-	# Marginalize over c-M relation scatter
-	if marginalize_cM_scatter:
-		
+	return setup
 
+def win_NFW_marginalized(ks, cs, sigma_lnc, cM_relation_name, hmod, z, **_):
+	'''
+	Calculates the marginalized window function for the NFW profile.
 
-	matter_profile = pyhalomodel.profile.Fourier(ks, Ms, Uk, amplitude=Ms, normalisation=hmod.rhom, mass_tracer=True) 
+	Parameters:
+	- ks (array-like): array of wavenumbers
+	- cs (array-like): array of concentrations
+	- sigma_lnc (float): scatter in the concentration-mass relation
+	- cM_relation_name (str): concentration-mass relation to use
+	- hmod (object): pyhalomodel model object
+	- z (float): redshift
 
-	# Compute halo model power spectrum
+	Returns:
+	- Uk (array-like): The marginalized window function array with shape (k, cs.size).
+	'''
+	# Now we want to integrate over the scatter in the concentration-mass relation
+	# Using the lognormal distribution, for each halo mass
+	# Set up finer 1d grids for integration
+	nsize = 1000  # Number of points for the integration
+	mass_array = np.logspace(5, 20, nsize)  # between 1e5 and 1e20 Msun/h
+	rvirial_array = hmod.virial_radius(mass_array)
+	concentration_array = get_concentration_mass_relation(mass_array, z, cM_relation_name)
+	Uk_grid = win_NFW(ks, rvirial_array, concentration_array) # shape is (k, M)
+
+	concentration_grid = np.repeat(np.atleast_2d(concentration_array), ks.size, axis=0) # shape is (k, M)
+	Uk = np.zeros(shape=(ks.size, cs.size))
+
+	for i, this_cbar in enumerate(cs):
+		# Compute the lognormal distribution
+		ln_c_pdf = lognormal_pdf(concentration_grid, np.log(this_cbar), sigma_lnc)
+
+		integrand = Uk_grid**2 * ln_c_pdf
+
+		# Need to flip so that the grid is in increasing order
+		# Otherwise integration is negative
+		Uk[:, i] = np.trapz(np.flip(integrand, axis=1), np.flip(concentration_grid, axis=1), axis=1)**0.5
+
+	return Uk
 
 def win_NFW(k, rv, c):
 	'''
@@ -311,7 +394,7 @@ def win_NFW(k, rv, c):
 	return Wk
 
 def lognormal_pdf(x, mu, sigma):
-	norm = (2*np.pi)**0.5 * mu * sigma
+	norm = (2*np.pi)**0.5 * x * sigma
 	return  1/norm * np.exp( - (np.log(x) - mu)**2 / (2 * sigma**2))
 
 def get_concentration_mass_relation(M, z, name, return_scatter=False):
@@ -334,7 +417,12 @@ def get_concentration_mass_relation(M, z, name, return_scatter=False):
 		B = -0.081
 		C = -0.71
 		M0 = 2e12  # Msun/h
-		return A*(M/M0)**B*(1+z)**C
+		sigma_lnc = 0.2
+		c = A*(M/M0)**B*(1+z)**C
+
+		if return_scatter:
+			return c, sigma_lnc
+		return c
 
 	elif name == 'Ragagnin et al. (2023)':
 		# Calirbrated from hydro simulations
@@ -354,6 +442,7 @@ def get_concentration_mass_relation(M, z, name, return_scatter=False):
 		return np.exp(ln_c)
 
 def get_Pk_Pylians(cube, box_size, calc_delta, MAS, savefile=None):
+	import Pk_library as PKL
 	if calc_delta is False:
 		if isinstance(cube, str):
 			delta = np.load(cube) # this is the 3D data
