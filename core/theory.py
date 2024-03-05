@@ -122,11 +122,9 @@ def build_CAMB_cosmology(input_cosmo={}, zs=[0.]):
 		As *= scaling
 		pars.InitPower.set_params(As=As, ns=ns, r=0.)
 
+	results = camb.get_results(pars)
 	sigma_8 = results.get_sigma8_0()
 	print('Final sigma_8:', sigma_8)
-
-	# Run
-	results = camb.get_results(pars)
 
 	return results
 
@@ -197,7 +195,6 @@ def get_pyHMCode_Pk(input_cosmo={}, z=[0.], fields=None, return_halo_terms=False
 		Pk_hm, Pk_hm_1halo, Pk_hm_2halo = pyhmcode.calculate_nonlinear_power_spectrum(c, hmod, fields, verbose=False, return_halo_terms=True)
 		return Pk_hm, Pk_hm_1halo, Pk_hm_2halo, ks
 
-
 def get_suppresion_hmcode(input_cosmo={}, zs=[0.], T_AGNs=None):
 	'''Matter power supression based on hmcode-the full Python
 	implementation of the Fortran HMCode.
@@ -264,6 +261,7 @@ def get_halomodel_Pk(input_cosmo={}, z=0., settings={}):
 
 	cM_relation_name = settings.get('cM_relation_name', 'Ragagnin et al. (2023)')
 	marginalize_cM_scatter = settings.get('marginalize_cM_scatter', False)
+	use_KDE = settings.get('use_KDE', False)
 	print('Marginalize over c-M scatter:', marginalize_cM_scatter)
 
 	# Create NFW profile
@@ -271,7 +269,12 @@ def get_halomodel_Pk(input_cosmo={}, z=0., settings={}):
 
 	# Marginalize over c-M relation scatter
 	if marginalize_cM_scatter:
-		Uk = win_NFW_marginalized(cM_relation_name=cM_relation_name, z=z, **setup)
+		if use_KDE is True:
+			# Use KDE to marginalize over the concentration-mass relation scatter
+			Uk = win_NFW_marginalized(cM_relation_name=cM_relation_name, z=z, **setup)
+
+		else:
+			Uk = win_NFW_marginalized(cM_relation_name=cM_relation_name, z=z, **setup)
 
 	else:
 		Uk = win_NFW(ks, rvs, cs)
@@ -283,11 +286,30 @@ def get_halomodel_Pk(input_cosmo={}, z=0., settings={}):
 	Pk_linear = Pk_lin_interpolator.P(z, ks) # Single out the linear P(k) interpolator and evaluate linear power
 
 	pack = ks, Pk_linear, Ms, sigmaRs
-	Pk_2h, Pk_1h, Pk_hm = hmod.power_spectrum(*pack, {'m': matter_profile})
+	Pk_2h, Pk_1h, Pk_hm = hmod.power_spectrum(*pack, {'m': matter_profile})#, simple_twohalo=True)
 
 	return Pk_hm, Pk_2h, Pk_1h, ks
 
 def setup_halomodel(input_cosmo={}, z=0., settings={}):
+	'''
+	Set up the halo model for a given cosmology and redshift.
+
+	Args:
+	- input_cosmo (dict): Input cosmological parameters.
+	- z (float): Redshift.
+	- settings (dict): Additional settings for the halo model. May contain the following keys:
+		kmin (float): Minimum wavenumber for the power spectrum calculation. Default is 1e-2.
+		kmax (float): Maximum wavenumber for the power spectrum calculation. Default is 50.
+		nk (int): Number of samples in k. Default is 101.
+		Mmin (float): Minimum halo mass for the power spectrum calculation. Default is 1e9.
+		Mmax (float): Maximum halo mass for the power spectrum calculation. Default is 1e17.
+		nM (int): Number of samples in halo mass. Default is 256.
+		Dv (float): Virial overdensity. Default is 330.
+		mass_function_name (str): Name of the mass function to use. Default is 'Tinker et al. (2010)'.
+		cM_relation_name (str): Name of the concentration-mass relation to use. Default is 'Ragagnin et al. (2023)'.
+	Returns:
+		dict: Dictionary containing the setup information for the halo model.
+	'''
 	if z!=0.:
 		raise NotImplementedError('Redshifts other than z=0 are not implemented yet')
 
@@ -295,13 +317,13 @@ def setup_halomodel(input_cosmo={}, z=0., settings={}):
 	camb_results = build_CAMB_cosmology(input_cosmo=input_cosmo, zs=[z])
 	
 	# Wavenumber range [h/Mpc]
-	kmin, kmax = 1e-2, 50
-	nk = 101
+	kmin, kmax = settings.get('kmin', 1e-2), settings.get('kmax', 50)
+	nk = settings.get('nk', 101)
 	ks = np.logspace(np.log10(kmin), np.log10(kmax), nk)
 
 	# Halo mass range [Msun/h] over which to integrate
-	Mmin, Mmax = 1e9, 1e17
-	nM = 256
+	Mmin, Mmax = settings.get('Mmin', 1e9), settings.get('Mmax', 1e17)
+	nM = settings.get('nM', 256)
 	Ms = np.logspace(np.log10(Mmin), np.log10(Mmax), nM)
 
 	# Set up halo model
@@ -329,7 +351,7 @@ def setup_halomodel(input_cosmo={}, z=0., settings={}):
 
 	return setup
 
-def win_NFW_marginalized(ks, cs, sigma_lnc, cM_relation_name, hmod, z, **_):
+def win_NFW_marginalized(ks, cs, sigma_lnc, cM_relation_name, hmod, z, Ms=None, use_KDE=False, KDE=None, **_):
 	'''
 	Calculates the marginalized window function for the NFW profile.
 
@@ -355,16 +377,21 @@ def win_NFW_marginalized(ks, cs, sigma_lnc, cM_relation_name, hmod, z, **_):
 
 	concentration_grid = np.repeat(np.atleast_2d(concentration_array), ks.size, axis=0) # shape is (k, M)
 	Uk = np.zeros(shape=(ks.size, cs.size))
-
 	for i, this_cbar in enumerate(cs):
 		# Compute the lognormal distribution
 		ln_c_pdf = lognormal_pdf(concentration_grid, np.log(this_cbar), sigma_lnc)
 
-		integrand = Uk_grid**2 * ln_c_pdf
+		if use_KDE is True:
+			halo_mass = Ms[i]
+			this_KDE = select_KDE(KDE, halo_mass)(concentration_array)
+
+			ln_c_pdf = np.repeat(np.atleast_2d(this_KDE), ks.size, axis=0) # shape is (k, M)
+
+		integrand = Uk_grid * ln_c_pdf
 
 		# Need to flip so that the grid is in increasing order
 		# Otherwise integration is negative
-		Uk[:, i] = np.trapz(np.flip(integrand, axis=1), np.flip(concentration_grid, axis=1), axis=1)**0.5
+		Uk[:, i] = np.trapz(np.flip(integrand, axis=1), np.flip(concentration_grid, axis=1), axis=1)#**0.5
 
 	return Uk
 
@@ -393,6 +420,29 @@ def win_NFW(k, rv, c):
 
 	return Wk
 
+def select_KDE(KDE_dict, mass):
+	'''
+	Selects the KDE to use for the marginalization over the concentration-mass relation scatter.
+
+	Parameters:
+	- KDE_dict (dict): Dictionary containing the KDEs for different halo masses.
+	- mass (float): Halo mass.
+
+	Returns:
+	- KDE (object): The selected KDE object.
+	'''
+	# The dictionary keys will specify the mass range as a string i.e, mmin<logM<mmax
+	# We need to convert the mass to log10(M)
+	logM = np.log10(mass)
+
+	# Find the mass bin
+	for key in KDE_dict:
+		mmin, mmax = map(float, key.split('<logM<'))
+		if logM>=mmin and logM<mmax:
+			return KDE_dict[key]
+
+
+
 def lognormal_pdf(x, mu, sigma):
 	norm = (2*np.pi)**0.5 * x * sigma
 	return  1/norm * np.exp( - (np.log(x) - mu)**2 / (2 * sigma**2))
@@ -417,7 +467,7 @@ def get_concentration_mass_relation(M, z, name, return_scatter=False):
 		B = -0.081
 		C = -0.71
 		M0 = 2e12  # Msun/h
-		sigma_lnc = 0.2
+		sigma_lnc = 0.3
 		c = A*(M/M0)**B*(1+z)**C
 
 		if return_scatter:
