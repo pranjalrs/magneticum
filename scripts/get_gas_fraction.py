@@ -16,7 +16,7 @@ import sys
 sys.path.append('../core/')
 
 import utils
-
+import sim_tools
 
 
 # Define arguments
@@ -69,15 +69,14 @@ halo_r500c = halo_catalog['R5CC']
 sort_by = halo_mvir.value
 inds = np.where((sort_by >= m_min) & (sort_by < m_max))[0]
 
+halo_positions = halo_positions[inds]
+halo_mvir = halo_mvir[inds]
+halo_m500c = halo_m500c[inds]
+halo_rvir = halo_rvir[inds]
+halo_r500c = halo_r500c[inds]
+
+
 with tqdm(total=len(inds)) as pbar:
-	halo_positions = halo_positions[inds]
-	halo_mvir = halo_mvir[inds]
-	halo_m500c = halo_m500c[inds]
-	halo_rvir = halo_rvir[inds]
-	halo_r500c = halo_r500c[inds]
-
-
-	# For each halo calculate pressure profile
 	for i in range(len(halo_positions)):
 		this_pos = halo_positions[i]
 		this_mvir = halo_mvir[i]
@@ -85,12 +84,10 @@ with tqdm(total=len(inds)) as pbar:
 		this_m500c = halo_m500c[i]
 		this_r500c = halo_r500c[i]
 
-		this_fgas_rvir = utils.get_fgas_halo(snap_base, this_pos, this_rvir, z=z, little_h=little_h)
-		this_fgas_3rvir = utils.get_fgas_halo(snap_base, this_pos, 3*this_rvir, z=z, little_h=little_h)
-
-		this_fgas_r500c = utils.get_fgas_halo(snap_base, this_pos, this_r500c, z=z, little_h=little_h)
+		this_fgas_rvir = sim_tools.get_fgas_halo(snap_base, this_pos, this_rvir, z=z, little_h=little_h)
+		this_fgas_r500c = sim_tools.get_fgas_halo(snap_base, this_pos, this_r500c, z=z, little_h=little_h)
         
-		data.append([this_mvir.value, this_fgas_r500c, this_fgas_rvir, this_fgas_3rvir-this_fgas_rvir])
+		data.append([this_mvir.value, this_fgas_r500c, this_fgas_rvir])
 
 		pbar.update(1)
 

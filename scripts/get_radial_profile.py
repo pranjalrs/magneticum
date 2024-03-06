@@ -17,6 +17,7 @@ import g3read
 import sys
 sys.path.append('../core/')
 
+import sim_tools
 import utils
 
 
@@ -134,7 +135,7 @@ with tqdm(total=nhalo) as pbar:
 		this_r500c = halo_r500c[i]
 		
 		filename = f'../../magneticum-data/data/test/{box}_cent/figures/halo_proj_id_{i}'
-		this_profile_data = utils.get_profile_for_halo(snap_base, this_pos, this_rvir, fields=field, recal_cent=True, save_proj=False, filename=filename, estimator=estimator)
+		this_profile_data = sim_tools.get_profile_for_halo(snap_base, this_pos, this_rvir, fields=field, recal_cent=True, save_proj=False, filename=filename, estimator=estimator)
 		
 		this_halo_data = np.array(tuple([this_mvir.value, this_rvir, this_m500c.value, this_r500c, this_pos, this_profile_data]), dtype=dtype)
 
@@ -160,7 +161,7 @@ if args.isSave is True:
 		joblib.dump(data, f'../../magneticum-data/data/profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1f}_{high_bin:.1f}.pkl')
 
 	elif binning == 'mvir':
-		joblib.dump(data, f'../../magneticum-data/data/profiles_{estimator}/{box}/{"_".join(field)}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
+		joblib.dump(data, f'../../magneticum-data/data/profiles_{estimator}/{box}/{"_".join(field)}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}_nhalo{nhalo}.pkl')
 
 
 #	joblib.dump(data, f'../magneticum-data/data/{field}_profile_{estimator}/{sim}/{field}_z={z:.2f}_Mmin_{m_min:.1E}_Mmax_{m_max:.1E}.pkl')
