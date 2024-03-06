@@ -407,35 +407,6 @@ def win_NFW_marginalized(ks, cs, sigma_lnc, mc_relation, hmod, z, Ms=None, use_K
 
 	return Uk
 
-def win_NFW_marginalized_KDE(ks, hmod, z, Ms=None, use_KDE=False, KDE=None, **_):
-	# Now we want to integrate over the scatter in the concentration-mass relation
-	# Using the lognormal distribution, for each halo mass
-	# Set up finer 1d grids for integration
-	nsize = 1000  # Number of points for the integration
-	mass_array = np.logspace(5, 20, nsize)  # between 1e5 and 1e20 Msun/h
-	rvirial_array = hmod.virial_radius(mass_array)
-	concentration_array = get_concentration_mass_relation(mass_array, z, cM_relation_name)
-	Uk_grid = win_NFW(ks, rvirial_array, concentration_array) # shape is (k, M)
-
-	concentration_grid = np.repeat(np.atleast_2d(concentration_array), ks.size, axis=0) # shape is (k, M)
-	Uk = np.zeros(shape=(ks.size, cs.size))
-	for i, this_cbar in enumerate(cs):
-		# Compute the lognormal distribution
-		ln_c_pdf = utils.lognormal_pdf(concentration_grid, np.log(this_cbar), sigma_lnc)
-
-		if use_KDE is True:
-			halo_mass = Ms[i]
-			this_KDE = utils.select_KDE(KDE, halo_mass)(concentration_array)
-
-			ln_c_pdf = np.repeat(np.atleast_2d(this_KDE), ks.size, axis=0) # shape is (k, M)
-
-		integrand = Uk_grid * ln_c_pdf
-
-		# Need to flip so that the grid is in increasing order
-		# Otherwise integration is negative
-		Uk[:, i] = np.trapz(np.flip(integrand, axis=1), np.flip(concentration_grid, axis=1), axis=1)#**0.5
-
-	return Uk
 
 def win_NFW(k, rv, c):
 	'''
