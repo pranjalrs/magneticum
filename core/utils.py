@@ -97,7 +97,7 @@ def set_storage_path():
 		storage_path = f'/dss/dssfs02/pr62go/pr62go-dss-0001/Magneticum/'
 
 
-def search_z_in_string(string)
+def search_z_in_string(string):
 	match = re.search(r'z=([0-9.]+)', string.split('/')[-1])
 
 	if match:
