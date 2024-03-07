@@ -96,6 +96,27 @@ def set_storage_path():
 	if 'di75sic' in current_directory:
 		storage_path = f'/dss/dssfs02/pr62go/pr62go-dss-0001/Magneticum/'
 
+
+def search_z_in_string(string)
+	match = re.search(r'z=([0-9.]+)', string.split('/')[-1])
+
+	if match:
+		return float(match.group(1))
+
+	else:
+		print(f'No redshift found in {string}')
+		return None
+
+def search_mass_range_in_string(string):
+	match = re.search(r'_([\d.Ee+-]+)_([\d.Ee+-]+)_z=\d+\.\d+')
+
+	if match:
+		return float(match.group(1)), float(match.group(2))
+	
+	else:
+		print(f'No mass range found in {string}')
+		return None, None
+
 ##### Functions mostly used in Jupyter notebook demo #####
 
 def get_omega_m(filename):
