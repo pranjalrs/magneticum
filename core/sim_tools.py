@@ -4,6 +4,7 @@ import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
+import scipy.stats
 import sys
 from tqdm import tqdm
 
@@ -391,13 +392,32 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask):
 		binned_Pe = np.histogram(these_pos, weights=Pe.value, bins=bins, density=False)[0]
 		return Pe.value, binned_Pe*Pe.unit, bin_centers, part_per_bin
 
-	if field_type == 'Temp':
+	if field_type == 'Temp_mean':
 		ptype = 0  # For gas
 		these_pos = particle_pos[ptype][mask[ptype]]
 		mass = particle_data[ptype]['MASS'][mask[ptype]]
-		Temp = particle_data[ptype]['TEMP'][mask[ptype]]
-
 		Temp = particle_data[ptype]['TEMP'][mask[ptype]]*Gadget.units.Temperature
+
+		bin_centers, bins_shell, part_per_bin = _build_hist_bins(these_pos, bins)
+
+		# Note that we need to divide by the number of particles in each bin
+		binned_Temp = np.histogram(these_pos, weights=Temp, bins=bins, density=False)[0]/part_per_bin
+
+		return Temp, binned_Temp, bin_centers, part_per_bin
+
+	if field_type == 'Temp_mass':
+		ptype = 0  # For gas
+		these_pos = particle_pos[ptype][mask[ptype]]
+		mass = particle_data[ptype]['MASS'][mask[ptype]]
+		Temp = particle_data[ptype]['TEMP'][mask[ptype]]*Gadget.units.Temperature
+
+		bin_centers, bins_shell, part_per_bin = _build_hist_bins(these_pos, bins)
+
+		# Note that we need to divide by the number of particles in each bin
+		binned_Temp = np.histogram(these_pos, weights=mass*Temp, bins=bins, density=False)[0]/part_per_bin
+
+		return Temp, binned_Temp, bin_centers, part_per_bin
+
 
 def _build_hist_bins(pos, bins):
 	"""
