@@ -75,7 +75,7 @@ class BaryonFraction():
 			return None, None
 
 
-class SimuDataHandler:
+class SimDataHandler:
 	def __init__(self, sim_name=None, sim_num=None, box='Box3', data_path='./'):
 		
 		self.sim_num_map = {
