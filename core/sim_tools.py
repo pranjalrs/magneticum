@@ -521,5 +521,6 @@ def get_fgas_halo(snap_base, halo_center, radius):
 	m_dm = np.sum(particle_data[1]['MASS'][mask_dm])
 
 	m_total = m_gas + m_dm + m_stars + m_bh
+	m_bary = m_gas + m_stars + m_bh
 
-	return m_gas/m_total
+	return m_gas/m_total, m_bary/m_total
