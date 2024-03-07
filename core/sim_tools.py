@@ -265,11 +265,8 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 	else:
 		ax = [None]*len(fields)
 	for i, field in enumerate(fields):
-		if field in ['Pe_Mead', 'matter', 'gas', 'cdm', 'v_disp']:
-			profile, r, npart = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, ax[i])
+		profile, r, npart = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, ax[i])
 
-		else:
-			profile, r, npart = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, estimator)
 
 		profiles_dict[field][0] = profile
 		profiles_dict[field][1] = r
@@ -313,7 +310,7 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 		this_ptype = 1
 		label = 'DM Density'	
 
-	elif field_type in ['Pe_Mead', 'gas', 'Temp']:
+	elif field_type in ['Pe_Mead', 'gas', 'Temp_mass', 'Temp_mean', 'Temp_median']:
 		this_ptype = 0
 		label = 'Electron Pressure'	
 	
@@ -360,7 +357,8 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask):
 
 		# Now compute `field`
 		density = mass/particle_volume  # Per particle and in code units
-		binned_density = np.histogram(these_pos, weights=density, bins=bins, density=False)[0]
+		binned_density = scipy.stats.binned_statistic(these_pos, values=density, bins=bins, statistic='sum')[0]
+
 		return density, binned_density, bin_centers, part_per_bin
 
 
@@ -374,7 +372,8 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask):
 
 		# Now compute `field`
 		density = mass/particle_volume  # Per particle and in code units
-		binned_density = np.histogram(these_pos, weights=density, bins=bins, density=False)[0]
+		binned_density = scipy.stats.binned_statistic(these_pos, values=density, bins=bins, statistic='sum')[0]
+
 		return density, binned_density, bin_centers, part_per_bin
 
 
@@ -389,21 +388,9 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask):
 		particle_volume = bins_shell[np.digitize(these_pos, bins)-1]*Gadget.units.length**3
 
 		Pe = get_comoving_electron_pressure_Mead(mass, Temp, Y, particle_volume)
-		binned_Pe = np.histogram(these_pos, weights=Pe.value, bins=bins, density=False)[0]
+		binned_Pe = scipy.stats.binned_statistic(these_pos, values=Pe, bins=bins, statistic='sum')[0]
+
 		return Pe.value, binned_Pe*Pe.unit, bin_centers, part_per_bin
-
-	if field_type == 'Temp_mean':
-		ptype = 0  # For gas
-		these_pos = particle_pos[ptype][mask[ptype]]
-		mass = particle_data[ptype]['MASS'][mask[ptype]]
-		Temp = particle_data[ptype]['TEMP'][mask[ptype]]*Gadget.units.Temperature
-
-		bin_centers, bins_shell, part_per_bin = _build_hist_bins(these_pos, bins)
-
-		# Note that we need to divide by the number of particles in each bin
-		binned_Temp = np.histogram(these_pos, weights=Temp, bins=bins, density=False)[0]/part_per_bin
-
-		return Temp, binned_Temp, bin_centers, part_per_bin
 
 	if field_type == 'Temp_mass':
 		ptype = 0  # For gas
@@ -414,9 +401,35 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask):
 		bin_centers, bins_shell, part_per_bin = _build_hist_bins(these_pos, bins)
 
 		# Note that we need to divide by the number of particles in each bin
-		binned_Temp = np.histogram(these_pos, weights=mass*Temp, bins=bins, density=False)[0]/part_per_bin
+		binned_Temp = scipy.stats.binned_statistic(these_pos, values=mass*Temp, bins=bins, statistic='sum')[0]
+		binned_mass = scipy.stats.binned_statistic(these_pos, values=mass, bins=bins, statistic='sum')[0]
 
-		return Temp, binned_Temp, bin_centers, part_per_bin
+		return Temp, binned_Temp/binned_mass*Temp.unit, bin_centers, part_per_bin
+
+	if field_type == 'Temp_mean':
+		ptype = 0  # For gas
+		these_pos = particle_pos[ptype][mask[ptype]]
+		mass = particle_data[ptype]['MASS'][mask[ptype]]
+		Temp = particle_data[ptype]['TEMP'][mask[ptype]]*Gadget.units.Temperature
+
+		bin_centers, bins_shell, part_per_bin = _build_hist_bins(these_pos, bins)
+
+		binned_Temp = scipy.stats.binned_statistic(these_pos, values=Temp, bins=bins, statistic='mean')[0]
+
+		return Temp, binned_Temp*Temp.unit, bin_centers, part_per_bin
+
+	if field_type == 'Temp_median':
+		ptype = 0  # For gas
+		these_pos = particle_pos[ptype][mask[ptype]]
+		mass = particle_data[ptype]['MASS'][mask[ptype]]
+		Temp = particle_data[ptype]['TEMP'][mask[ptype]]*Gadget.units.Temperature
+
+		bin_centers, bins_shell, part_per_bin = _build_hist_bins(these_pos, bins)
+
+		binned_Temp = scipy.stats.binned_statistic(these_pos, values=Temp, bins=bins, statistic='median')[0]
+
+		return Temp, binned_Temp*Temp.unit, bin_centers, part_per_bin
+
 
 
 def _build_hist_bins(pos, bins):
