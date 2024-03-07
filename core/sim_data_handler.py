@@ -26,8 +26,13 @@ class PowerSpectrum:
 		
 		if (self.Pk_hydro is not None) and (self.Pk_dm is not None):
 			self.Pk_ratio = self.Pk_hydro/self.Pk_dm
-		
-		else: self.Pk_ratio = None
+			kmin, kmax = 5, 15
+			k_idx = (self.k > kmin) & (self.k < kmax)
+			self.Pk_ratio_mean = np.median(self.Pk_ratio[k_idx])
+
+		else: 
+			self.Pk_ratio = None
+			self.Pk_ratio_mean = None
 	
 	@staticmethod
 	def _loadtxt(path, **kwargs):
@@ -59,10 +64,10 @@ class BaryonFraction():
 		self.fbar_r500c = data[:, 3]
 		self.fbar_rvir = data[:, 4]
 
-		self.mean_fgas_r500c = np.mean(self.fgas_r500c)
-		self.mean_fgas_rvir = np.mean(self.fgas_rvir)
-		self.mean_fbar_r500c = np.mean(self.fbar_r500c)
-		self.mean_fbar_rvir = np.mean(self.fbar_rvir)
+		self.fgas_r500c_mean = np.mean(self.fgas_r500c)
+		self.fgas_rvir_mean = np.mean(self.fgas_rvir)
+		self.fbar_r500c_mean = np.mean(self.fbar_r500c)
+		self.fbar_rvir_mean = np.mean(self.fbar_rvir)
 
 
 	@staticmethod
@@ -124,7 +129,8 @@ class SimDataHandler:
 	@staticmethod
 	def _init_power_spectrum(box, sim_name, data_path):
 		# Assumes that Pk is stored in data/Pylians/Pk_matter/
-		cosmo_snaps = sorted(glob.glob(f'{data_path}/data/Pylians/Pk_matter/{box}/Pk_{sim_name}_z=*_R1024.txt'))
+		path = f'{data_path}/Pylians/Pk_matter/{box}/{sim_name}/Pk_{sim_name}_z=*_R1024.txt'
+		cosmo_snaps = sorted(glob.glob(path))
 
 		print(f'Found Pk for {len(cosmo_snaps)} snapshots in {sim_name}')
 		Pks = {}
@@ -136,7 +142,8 @@ class SimDataHandler:
 	
 	@staticmethod
 	def _init_baryon_fraction(box, sim_name, data_path):
-		cosmo_snaps = sorted(glob.glob(f'{data_path}/gas_fraction/{box}/{sim_name}/gas_fraction_*_z=0.000.txt'))
+		path = f'{data_path}/gas_fraction/{box}/{sim_name}/gas_fraction_*_z=0.000.txt'
+		cosmo_snaps = sorted(glob.glob(path))
 
 		print(f'Found baryon fraction for {len(cosmo_snaps)} snapshots in {sim_name}')
 
@@ -144,3 +151,5 @@ class SimDataHandler:
 		for snap in cosmo_snaps:
 			bf = BaryonFraction(snap)
 			baryon_fractions[bf.mass_range_str] = bf
+		
+		return baryon_fractions
