@@ -11,7 +11,7 @@ class CleanCommand(Command):
     def run(self):
         os.system('rm -vrf ./build ./dist ./*.pyc ./*.tgz ./*.egg-info')
 
-setup(name='tSZxLSS',
+setup(name='dawn',
       version='1.0',
       packages=find_packages(),
       cmdclass={
