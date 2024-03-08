@@ -13,8 +13,8 @@ import astropy.units as u
 import astropy.constants as constants
 import g3read
 
-from tSZxLSS.gadget import Gadget
-import tSZxLSS.utils as utils
+from dawn.gadget import Gadget
+import dawn.utils as utils
 
 
 def get_mean_mass_per_particle(Y):

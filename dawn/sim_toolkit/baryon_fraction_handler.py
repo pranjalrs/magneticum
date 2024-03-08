@@ -1,6 +1,6 @@
 import numpy as np
 
-import tSZxLSS.utils as utils
+import dawn.utils as utils
 
 class BaryonFractionHandler():
     """

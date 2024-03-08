@@ -1,9 +1,8 @@
 import glob
 
-import tSZxLSS.utils as utils
-
-from tSZxLSS.sim_toolkit.power_spectrum_handler import PowerSpectrumHandler
-from tSZxLSS.sim_toolkit.baryon_fraction_handler import BaryonFractionHandler
+from dawn.sim_toolkit.power_spectrum_handler import PowerSpectrumHandler
+from dawn.sim_toolkit.baryon_fraction_handler import BaryonFractionHandler
+import dawn.utils as utils
 
 class DataHandler:
 	'''

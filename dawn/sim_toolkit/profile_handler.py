@@ -1,7 +1,7 @@
 import joblib
 import numpy as np
 
-from tSZxLSS.sim_toolkit.containers import ProfileContainer
+from dawn.sim_toolkit.containers import ProfileContainer
 
 class HaloProfileHandler():
 	'''
@@ -97,7 +97,7 @@ class HaloProfileHandler():
 			tuple: Tuple containing profile, r, profile_rescale, sigma_prof, and sigma_lnprof (if return_sigma is True),
 				or profile, r, and profile_rescale (if return_sigma is False).
 		'''
-		if field=='dm':
+		if field=='rho_dm':
 			r = halo['fields']['cdm'][1]/halo['rvir']
 			profile = halo['fields']['cdm'][0]
 			npart = halo['fields']['cdm'][2]
