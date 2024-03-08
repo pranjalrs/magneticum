@@ -4,13 +4,6 @@ class Likelihood:
 	'''
 	Class computing the likelihood for profile fitting.
 
-	Parameters:
-	- profile_container_dict (dict): Dictionary containing the profiles of different fields.
-	- model (object): The model used to evaluate the likelihood, should be a HaloProfile instance.
-	- fit_params (list): List of parameter names to be fitted.
-	- priors (dict): Dictionary containing the prior ranges for the parameters.
-	- chi2_type (str, optional): Type of chi-squared calculation. Default is 'log'.
-
 	Attributes:
 	- chi2_type (str): Type of chi-squared calculation.
 	- fit_par (list): List of parameter names to be fitted.
@@ -32,6 +25,14 @@ class Likelihood:
 	'''
 
 	def __init__(self, profile_container_dict, model, fit_params, priors, chi2_type='log'):
+		'''
+		Parameters:
+		- profile_container_dict (dict): Dictionary containing the profiles of different fields.
+		- model (object): The model used to evaluate the likelihood, should be a HaloProfile instance.
+		- fit_params (list): List of parameter names to be fitted.
+		- priors (dict): Dictionary containing the prior ranges for the parameters.
+		- chi2_type (str, optional): Type of chi-squared calculation. Default is 'log'.
+		'''
 		self.chi2_type = chi2_type
 		self.fit_par = fit_params
 		self.model = model
