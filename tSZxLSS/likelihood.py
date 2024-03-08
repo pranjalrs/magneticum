@@ -1,6 +1,36 @@
 import numpy as np
 
 class Likelihood:
+	'''
+	Class computing the likelihood for profile fitting.
+
+	Parameters:
+	- profile_container_dict (dict): Dictionary containing the profiles of different fields.
+	- model (object): The model used to evaluate the likelihood, should be a HaloProfile instance.
+	- fit_params (list): List of parameter names to be fitted.
+	- priors (dict): Dictionary containing the prior ranges for the parameters.
+	- chi2_type (str, optional): Type of chi-squared calculation. Default is 'log'.
+
+	Attributes:
+	- chi2_type (str): Type of chi-squared calculation.
+	- fit_par (list): List of parameter names to be fitted.
+	- model (object): The model used to evaluate the likelihood.
+	- profile_dict (dict): Dictionary containing the profiles of different fields.
+	- fields (list): List of fields for which the likelihood is calculated.
+	- priors (dict): Dictionary containing the prior ranges for the parameters.
+	- mvir (float): Virial mass of the halo.
+	- _model_args_return_rho (bool): Flag indicating if the model returns density profiles.
+	- _model_args_return_Temp (bool): Flag indicating if the model returns temperature profiles.
+
+	Methods:
+	- __call__(self, theta): Calls the log_likelihood method.
+	- log_likelihood(self, theta): Calculates the log likelihood for the given parameter values.
+	- eval_model(self, theta): Evaluates the model for the given field and parameter values.
+	- eval_chi2(self, data, model, sigma=None, lnsigma=None): Calculates the chi-squared value for the given data and model.
+	- _init_priors(params, priors): Initializes the priors for the parameters.
+
+	'''
+
 	def __init__(self, profile_container_dict, model, fit_params, priors, chi2_type='log'):
 		self.chi2_type = chi2_type
 		self.fit_par = fit_params
@@ -8,7 +38,6 @@ class Likelihood:
 		self.profile_dict = profile_container_dict
 
 		self.fields = profile_container_dict.keys()
-		# assert that fields among ['rho_dm', 'rho_gas', 'Pe', 'Temp']
 		assert all([field in ['rho_dm', 'rho_gas', 'Pe', 'Temp'] for field in self.fields]), 'Fields should be among ["rho_dm", "rho_gas", "Pe", "Temp"]'
 
 		self.priors = self._init_priors(fit_params, priors)
@@ -16,19 +45,38 @@ class Likelihood:
 
 		if 'rho_gas' in self.fields: 
 			self._model_args_return_rho = True
-		else: self._model_args_return_rho = False
+		else: 
+			self._model_args_return_rho = False
 
 		if 'Temp' in self.fields: 
 			self._model_args_return_Temp = True
-		else: self._model_args_return_Temp = False
-
+		else: 
+			self._model_args_return_Temp = False
 
 	def __call__(self, theta):
+		'''
+		Calls the log_likelihood method.
+
+		Parameters:
+		- theta (dict): Dictionary of parameter values.
+
+		Returns:
+		- float: The log likelihood value.
+
+		'''
 		return self.log_likelihood(theta)
 
-
 	def log_likelihood(self, theta):
-		# check if the parameter values are within the prior range
+		'''
+		Calculates the log likelihood for the given parameter values.
+
+		Parameters:
+		- theta (dict): Dictionary of parameter values.
+
+		Returns:
+		- float: The log likelihood value.
+
+		'''
 		for param in self.fit_params:
 			if not self.priors[param][0] <= theta[param] <= self.priors[param][1]:
 				return -np.inf
@@ -45,17 +93,16 @@ class Likelihood:
 
 		return -0.5*chi2
 
-
 	def eval_model(self, theta):
 		'''
-		Evaluate the model for the given field and parameter values.
+		Evaluates the model for the given field and parameter values.
 
 		Parameters:
-		- field (str): The field for which the model is to be evaluated.
 		- theta (dict): Dictionary of parameter values.
 
 		Returns:
-		- model (ndarray): The model predicted values for the given field.
+		- dict: Dictionary containing the model predicted values for each field.
+
 		'''
 		self.model.update_param(self.fit_params, theta)
 
@@ -68,21 +115,20 @@ class Likelihood:
 			rbins = self.profile_dict['rho_dm'].rbins
 			model_prediction['rho_dm'] = self.model.get_rho_dm_profile_interpolated(self.mvir, r_bins=rbins, z=0.)[0]
 
-
 		rbins = self.profile_dict['rho_gas'].rbins
 		profs, _ = self.get_Pe_profile_interpolated(self.mvir, r_bins=rbins, z=0., 
-											  return_rho=self._model_args_return_rho, return_Temp=self._model_args_return_Temp)
+													return_rho=self._model_args_return_rho, return_Temp=self._model_args_return_Temp)
 
 		for field in self.fields:
-			if field == 'rho_dm': continue
+			if field == 'rho_dm': 
+				continue
 			model_prediction[field] = profs[field]
 
 		return model_prediction
 
-
 	def eval_chi2(self, data, model, sigma=None, lnsigma=None):
 		'''
-		Calculate the chi-squared value for the given data and model.
+		Calculates the chi-squared value for the given data and model.
 
 		Parameters:
 		- data (ndarray): The observed data.
@@ -91,7 +137,8 @@ class Likelihood:
 		- lnsigma (ndarray, optional): The natural logarithm of the standard deviation of the data. Default is None.
 
 		Returns:
-			float: The chi-squared value.
+		- float: The chi-squared value.
+
 		'''
 		if self.chi2_type == 'log':
 			num = np.log(data / model)
@@ -109,28 +156,27 @@ class Likelihood:
 		else:
 			return np.sum(residual**2)
 
-
 	@staticmethod
 	def _init_priors(params, priors):
 		'''
-		Initialize the priors for the parameters.
+		Initializes the priors for the parameters.
 
 		Parameters:
 		- params (list): List of parameter names.
 		- priors (dict): Dictionary containing priors for the parameters.
 
 		Returns:
-		- priors (dict): Updated dictionary of priors.
+		- dict: Updated dictionary of priors.
 
 		Raises:
 		- ValueError: If a parameter in `params` does not have a prior in `priors`.
 		- Warning: If additional parameters are found in `priors` that are not in `params`.
+
 		'''
 		for param in params:
 			if param not in priors:
 				raise ValueError(f'No prior found for parameter {param}')
 		
-		# Also raise warning if additional parameters are found in the priors dictionary
 		for param in priors:
 			if param not in params:
 				raise Warning(f'Prior dictionary contains additional parameter `{param}` !')
