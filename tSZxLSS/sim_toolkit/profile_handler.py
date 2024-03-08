@@ -1,7 +1,7 @@
 import joblib
 import numpy as np
 
-from container import ProfileContainer
+from tSZxLSS.sim_toolkit.containers import ProfileContainer
 
 class HaloProfileHandler():
 	'''
