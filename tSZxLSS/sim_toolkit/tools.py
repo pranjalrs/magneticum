@@ -13,13 +13,9 @@ import astropy.units as u
 import astropy.constants as constants
 import g3read
 
-import sys
-sys.path.append('../core/')
+from tSZxLSS.gadget import Gadget
+import tSZxLSS.utils as utils
 
-from gadget import Gadget
-import utils
-
-import ipdb
 
 def get_mean_mass_per_particle(Y):
 	"""Calculates mean mass per particle assuming a completely ionized gas (H + He)

@@ -1,9 +1,11 @@
 import glob
-import utils
-from power_spectrum_handler import PowerSpectrumHandler
-from baryon_fraction_handler import BaryonFractionHandler
 
-class SimDataHandler:
+import tSZxLSS.utils as utils
+
+from tSZxLSS.sim_toolkit.power_spectrum_handler import PowerSpectrumHandler
+from tSZxLSS.sim_toolkit.baryon_fraction_handler import BaryonFractionHandler
+
+class DataHandler:
 	'''
 	A class that handles simulation data for a given simulation.
 
