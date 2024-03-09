@@ -78,4 +78,7 @@ class ProfileInterpolator():
 			else:
 				interp_profiles = interp_profiles.reshape(np.array(rbins).shape)
 
+			if np.isnan(interp_profiles).any():
+				raise ValueError('Interpolated profiles contain NaNs. Halo mass/rbins might be out of interpolation range.')
+
 			return interp_profiles

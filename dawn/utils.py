@@ -81,7 +81,7 @@ def get_cosmology_dict_from_path(path):
 
 def _assert_correct_field(fields):
 	for f in fields:
-		assert f in ['Pe', 'Temp', 'matter', 'cdm', 'gas', 'Pe_Mead', 'v_disp'], f'Field *{f}* is unknown!'
+		assert f in  ['Pe', 'Temp_mean', 'Temp_median', 'Temp_mass', 'matter', 'cdm', 'gas', 'Pe_Mead', 'v_disp'], f'Field *{f}* is unknown!'
 
 
 def set_storage_path():

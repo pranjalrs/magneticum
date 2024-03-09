@@ -13,13 +13,9 @@ import astropy.units as u
 import astropy.constants as constants
 import g3read
 
-import sys
-sys.path.append('../core/')
+from dawn.gadget import Gadget
+import dawn.utils as utils
 
-from gadget import Gadget
-import utils
-
-import ipdb
 
 def get_mean_mass_per_particle(Y):
 	"""Calculates mean mass per particle assuming a completely ionized gas (H + He)
@@ -323,7 +319,7 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask):
 		density = mass/particle_volume  # Per particle and in code units
 		binned_density = scipy.stats.binned_statistic(these_pos, values=density, bins=bins, statistic='sum')[0]
 
-		return density, binned_density, bin_centers, part_per_bin
+		return density, binned_density*density.unit, bin_centers, part_per_bin
 
 
 	if field_type == 'gas':
@@ -338,7 +334,7 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask):
 		density = mass/particle_volume  # Per particle and in code units
 		binned_density = scipy.stats.binned_statistic(these_pos, values=density, bins=bins, statistic='sum')[0]
 
-		return density, binned_density, bin_centers, part_per_bin
+		return density, binned_density*density.unit, bin_centers, part_per_bin
 
 
 	if field_type == 'Pe_Mead':

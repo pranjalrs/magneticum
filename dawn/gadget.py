@@ -1,10 +1,11 @@
+import astropy.cosmology.units as cu
 import astropy.units as u
 
 class GadgetUnits():
 	def __init__(self):
 		# Internal GADGET units, see:  https://wwwmpa.mpa-garching.mpg.de/~kdolag/GadgetHowTo/right.html#Format2
-		self.length = 1*u.kpc  # kpc/h
-		self.mass = 1e10*u.Msun  # Msun/h
+		self.length = 1*u.kpc/cu.littleh  # kpc/h
+		self.mass = 1e10*u.Msun/cu.littleh  # Msun/h
 		self.velocity = 1*u.km/u.second
 		self.time = (self.length/self.velocity).to(u.second)
 		self.Temperature = 1*u.K

@@ -11,7 +11,7 @@ import astropy.cosmology.units as cu
 
 from interpolator import ProfileInterpolator
 
-class Profile():
+class HaloProfile():
 	def __init__(self, **kwargs) -> None:
 		## Cosmology
 		self.omega_m = 0.272
@@ -174,22 +174,10 @@ class Profile():
 			r_bins = np.logspace(np.log10(0.1), np.log10(1), 200)
 
 		this_z_rho_dm_interp = self._rho_dm_prof_interpolator[z]
-		m_min, m_max = this_z_rho_dm_interp.get_knots()[0].min(), this_z_rho_dm_interp.get_knots()[0].max()
-		r_min, r_max = this_z_rho_dm_interp.get_knots()[1].min(), this_z_rho_dm_interp.get_knots()[1].max()
-
 
 		M = M.to(u.Msun/cu.littleh)
 
-		if np.any((M.value < m_min) | (M.value > m_max)):
-			idx = np.where((M.value < m_min) | (M.value > m_max))[0][0]
-			raise Exception(f'''Mass {np.log10(M.value[idx]):.2f} Msun/h is outside the interpolation 
-			range of {np.log10(m_min):.2f} - {np.log10(m_max):.2f} Msun/h!''')
-		
-		if np.any((r_bins < r_min) | (r_bins > r_max)):
-			idx = np.where((r_bins < r_min) | (r_bins > r_max))[0][0]
-			raise Exception(f'Radius {r_bins[idx]} outside interpolation range of {r_min} - {r_max} R/Rvir!')
-
-		this_rho_dm_profile = this_z_rho_dm_interp(M, r_bins)
+		this_rho_dm_profile = this_z_rho_dm_interp.eval(M, r_bins)
 		this_rho_dm_profile *= self._rho_dm_prof_interpolator_units
 
 		return_profiles = this_rho_dm_profile
@@ -244,38 +232,31 @@ class Profile():
 		if r_bins is None:
 			r_bins = np.logspace(np.log10(0.1), np.log10(1), 200)
 
-		this_z_Pe_interp = self._Pe_prof_interpolator[z]
-		m_min, m_max = this_z_Pe_interp.get_knots()[0].min(), this_z_Pe_interp.get_knots()[0].max()
-		r_min, r_max = this_z_Pe_interp.get_knots()[1].min(), this_z_Pe_interp.get_knots()[1].max()
+		# elif 
 
+
+		this_z_Pe_interp = self._Pe_prof_interpolator[z]
 
 		M = M.to(u.Msun/cu.littleh)
 
-		if np.any((M.value < m_min) | (M.value > m_max)):
-			idx = np.where((M.value < m_min) | (M.value > m_max))[0][0]
-			raise Exception(f'''Mass {np.log10(M.value[idx]):.2f} Msun/h is outside the interpolation 
-			range of {np.log10(m_min):.2f} - {np.log10(m_max):.2f} Msun/h!''')
-		
-		if np.any((r_bins < r_min) | (r_bins > r_max)):
-			idx = np.where((r_bins < r_min) | (r_bins > r_max))[0][0]
-			raise Exception(f'Radius {r_bins[idx]} outside interpolation range of {r_min} - {r_max} R/Rvir!')
-
-		this_Pe_profile = this_z_Pe_interp(M, r_bins)
+		this_Pe_profile = this_z_Pe_interp.eval(M, r_bins[0])
 		this_Pe_profile *= self._Pe_prof_interpolator_units
 
-		return_profiles = (this_Pe_profile,)
+		return_profiles = {}
+
+		return_profiles['Pe'] = this_Pe_profile
 
 		if return_rho is True:
-			this_rho_profile = self._rho_prof_interpolator[z](M, r_bins)
+			this_rho_profile = self._rho_prof_interpolator[z].eval(M, r_bins[1])
 			this_rho_profile *= self._rho_prof_interpolator_units
 
-			return_profiles += (this_rho_profile,)
-			
+			return_profiles['rho_gas'] = this_rho_profile
+
 		if return_Temp is True:
-			this_Temp_profile = self._Temp_prof_interpolator[z](M, r_bins)
+			this_Temp_profile = self._Temp_prof_interpolator[z].eval(M, r_bins[2])
 			this_Temp_profile *= self._Temp_prof_interpolator_units
 
-			return_profiles += (this_Temp_profile,)
+			return_profiles['Temp'] = this_Temp_profile
 
 		return return_profiles, r_bins
 
