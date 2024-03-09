@@ -355,7 +355,7 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask):
 		density = mass/particle_volume  # Per particle and in code units
 		binned_density = scipy.stats.binned_statistic(these_pos, values=density, bins=bins, statistic='sum')[0]
 
-		return density, binned_density, bin_centers, part_per_bin
+		return density, binned_density*density.unit, bin_centers, part_per_bin
 
 
 	if field_type == 'gas':
@@ -370,7 +370,7 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask):
 		density = mass/particle_volume  # Per particle and in code units
 		binned_density = scipy.stats.binned_statistic(these_pos, values=density, bins=bins, statistic='sum')[0]
 
-		return density, binned_density, bin_centers, part_per_bin
+		return density, binned_density*density.unit, bin_centers, part_per_bin
 
 
 	if field_type == 'Pe_Mead':
