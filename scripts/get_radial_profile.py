@@ -14,11 +14,8 @@ from colossus.cosmology import cosmology
 from colossus.lss import peaks
 import g3read
 
-import sys
-sys.path.append('../core/')
-
-import sim_tools
-import utils
+from dawn.sim_toolkit import tools
+import dawn.utils as utils
 
 
 
@@ -28,7 +25,6 @@ parser.add_argument('--box', default='Box1a', type=str)
 parser.add_argument('--sim', default='mr_bao', type=str)
 parser.add_argument('--redshift_id', default=144, type=str)
 parser.add_argument('--field')
-parser.add_argument('--estimator', default='median', type=str)
 parser.add_argument('--nhalo', default=2000, type=int)
 parser.add_argument('--file_start', default=0, type=int)
 parser.add_argument('--file_stop', default=512, type=int)
@@ -43,7 +39,7 @@ args = parser.parse_args()
 
 box = args.box
 sim, redshift_id = args.sim, args.redshift_id
-field, estimator = args.field.strip('"').split(','), args.estimator
+field = args.field.strip('"').split(',')
 file_start, file_stop = args.file_start, args.file_stop
 nhalo, binning = args.nhalo, args.binning
 
@@ -77,7 +73,7 @@ dtype = np.dtype({'names': ['Halo mass: Rvir (Msun/h)', 'Rvir (ckpc/h)', 'Halo m
  				'titles': ['mvir', 'rvir', 'm500c', 'r500c', 'gpos', 'fields'],
  				'formats': ['float', 'float', 'float', 'float', object, object]})
 
-print(f'Computing profile for field {field} and estimator {estimator} \n')
+print(f'Computing profile for field {field}\n')
 print(f'Using simulation {box}/{sim} at z={z:.2f}\n')
 print(f'Binning in {binning} with min. = {low_bin} and max. = {high_bin}\n')
 
@@ -135,7 +131,7 @@ with tqdm(total=nhalo) as pbar:
 		this_r500c = halo_r500c[i]
 		
 		filename = f'../../magneticum-data/data/test/{box}_cent/figures/halo_proj_id_{i}'
-		this_profile_data = sim_tools.get_profile_for_halo(snap_base, this_pos, this_rvir, fields=field, recal_cent=True, save_proj=False, filename=filename, estimator=estimator)
+		this_profile_data = tools.get_profile_for_halo(snap_base, this_pos, this_rvir, fields=field, recal_cent=True, save_proj=False, filename=filename)
 		
 		this_halo_data = np.array(tuple([this_mvir.value, this_rvir, this_m500c.value, this_r500c, this_pos, this_profile_data]), dtype=dtype)
 
@@ -147,7 +143,7 @@ with tqdm(total=nhalo) as pbar:
 data = np.delete(data, (0), axis=0)
 
 if args.isSave is True:
-	os.makedirs(f'../../magneticum-data/data/profiles_{estimator}/{box}/', exist_ok=True)
+	os.makedirs(f'../../magneticum-data/data/profiles/{box}/', exist_ok=True)
 
 	if args.test is True:
 		os.makedirs(f'../../magneticum-data/data/test/{box}/', exist_ok=True)
@@ -155,13 +151,13 @@ if args.isSave is True:
 		joblib.dump(data, f'../../magneticum-data/data/test/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}_nhalo{nhalo}.pkl')
 
 	elif binning == 'm500c':	
-		joblib.dump(data, f'../../magneticum-data/data/profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
+		joblib.dump(data, f'../../magneticum-data/data/profiles/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
 
 	elif binning == 'nu_m500c':
-		joblib.dump(data, f'../../magneticum-data/data/profiles_{estimator}/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1f}_{high_bin:.1f}.pkl')
+		joblib.dump(data, f'../../magneticum-data/data/profiles/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1f}_{high_bin:.1f}.pkl')
 
 	elif binning == 'mvir':
-		joblib.dump(data, f'../../magneticum-data/data/profiles_{estimator}/{box}/{"_".join(field)}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}_nhalo{nhalo}.pkl')
+		joblib.dump(data, f'../../magneticum-data/data/profiles/{box}/{"_".join(field)}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}_nhalo{nhalo}.pkl')
 
 
 #	joblib.dump(data, f'../magneticum-data/data/{field}_profile_{estimator}/{sim}/{field}_z={z:.2f}_Mmin_{m_min:.1E}_Mmax_{m_max:.1E}.pkl')
