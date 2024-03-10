@@ -166,7 +166,7 @@ std_dev = {'lognorm_rho': 0.1,
 			'conc_param': 0.1}
 
 #####-------------- Load Data --------------#####
-files = glob.glob('../../magneticum-data/data/profiles_median/*/cdm*.pkl')
+files = glob.glob('../../magneticum-data/data/profiles/*/cdm*nhalo2000.pkl')
 
 profile_handler = HaloProfileHandler(['rho_dm'], files)
 
