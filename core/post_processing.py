@@ -64,9 +64,9 @@ def get_mean_profile_all_fields(halo_data, r_over_Rvir_bins=None, r_name='rvir',
 
 		all_rvir = np.array([halo[r_name] for halo in halo_data])
 
-		mean_prof, std, lnstd = get_mean_profile_one_field(all_profiles, all_r_bins, all_sigma, all_rvir, r_over_Rvir_bins, rescale)
+		mean_prof, r, std, lnstd = get_mean_profile_one_field(all_profiles, all_r_bins, all_sigma, all_rvir, r_over_Rvir_bins, rescale)
 		mean_profile_dict[field][0] = mean_prof
-		mean_profile_dict[field][1] = r_over_Rvir_bins
+		mean_profile_dict[field][1] = r
 		mean_profile_dict[field][2] = std
 		mean_profile_dict[field][3] = lnstd
 
@@ -83,13 +83,12 @@ def get_mean_profile_one_field(profiles, r_bins, sigmas, rvir, r_over_Rvir_bins,
 
 		# Create interpolator
 		this_rscale = this_r_bins/this_rvir
-		get_profile_interp = scipy.interpolate.interp1d(this_rscale, this_profile)
 
 		if rescale is True:
-			this_rescaled_profile = get_profile_interp(r_over_Rvir_bins)/get_profile_interp(1.)
+			this_rescaled_profile = this_profile/this_profile[-1]
 
 		elif rescale is False:
-			this_rescaled_profile = get_profile_interp(r_over_Rvir_bins)
+			this_rescaled_profile = this_profile
 
 		if not np.any(np.isnan(this_rescaled_profile)):
 			rescaled_profiles.append(this_rescaled_profile)
@@ -99,8 +98,10 @@ def get_mean_profile_one_field(profiles, r_bins, sigmas, rvir, r_over_Rvir_bins,
 	rescaled_r_bins = np.array(rescaled_r_bins)
 
 # 	ipdb.set_trace()
-	mean_profile = np.mean(rescaled_profiles, axis=0)
+	mean_profile = np.nanmean(rescaled_profiles, axis=0)
+	mean_r = np.nanmean(rescaled_r_bins, axis=0)
+
 	std = np.mean(sigmas**2, axis=0)
 	log_std = np.std(np.log(rescaled_profiles), where=~np.isinf(np.log(rescaled_profiles)), axis=0)
 
-	return mean_profile, std, log_std
+	return mean_profile, mean_r, std, log_std
