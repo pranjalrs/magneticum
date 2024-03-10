@@ -8,7 +8,7 @@ import scipy.stats
 import sys
 from tqdm import tqdm
 
-
+import astropy.cosmology.units as cu
 import astropy.units as u
 import astropy.constants as constants
 import g3read
@@ -72,7 +72,7 @@ def get_comoving_electron_pressure(rho, Temp, Y):
 	mu = get_mean_mass_per_particle(Y)
 	ngas = rho/(mu*constants.m_p)
 	P_thermal = ngas*constants.k_B*Temp
-	Pe = ((4-2*Y)/(8-5*Y)*P_thermal).to(u.keV/u.cm**3)  # In comoving keV/cm^3 h^2
+	Pe = ((4-2*Y)/(8-5*Y)*P_thermal).to(u.keV/u.cm**3*cu.littleh**2)  # In comoving keV/cm^3 h^2
 
 	return Pe
 
@@ -85,7 +85,7 @@ def get_comoving_electron_pressure_Mead(mass, Temp, Y, volume):
 	Ne = mass/constants.m_p/mu_e  # No. of electrons
 	Pe = Ne*constants.k_B*Temp/volume
 
-	Pe = Pe.to(u.keV/u.cm**3)
+	Pe = Pe.to(u.keV/u.cm**3*cu.littleh**2)
 
 	return Pe
 
@@ -125,81 +125,9 @@ def get_physical_electron_pressure(rho, Temp, Y, z, little_h):
 	return physical_Pe
 
 
-def get_field_for_halo(particle_data, mask, z, little_h, field, r1=None, r2=None, **kwargs):
-	"""Gets specified field for particles in a halo, in physical units
-
-	Parameters
-	----------
-	gas_data : Dict
-		Dictionary of blocks necessary for calcualting field
-	mask : 2D array
-		2D array to mask particles not in halo/radial bin
-	z : float
-		Redshift
-	little_h : float
-		H0/(100 km/s/Mpc)
-	field : str
-		Field name: Electron Pressure (Pe), Temperature (Temp)
-
-	Returns
-	-------
-	list
-		List of field values
-	"""
-	if r1 is not None and r2 is not None:
-		assert r1 < r2, "r1 must be smaller than r2 "
-		r1, r2 = r1*Gadget.units.length, r2*Gadget.units.length
-		shell_volume = 4*np.pi/3 * (r2**3 - r1**3)  # in (kpc/h)**3
-
-	if field == 'Pe':
-		rho = particle_data[0]['RHO '][mask[0]]
-		Temp = particle_data[0]['TEMP'][mask[0]]
-		Y = particle_data[0]['Zs  '][mask[0]][:, 0]  # Helium Fraction
-		Pe = get_physical_electron_pressure(rho, Temp, Y, z, little_h)
-		return Pe
-	
-	if field == 'Pe_Mead':
-		
-		mass = particle_data[0]['MASS'][mask[0]]
-		Temp = particle_data[0]['TEMP'][mask[0]]
-		Y = particle_data[0]['Zs  '][mask[0]][:, 0]  # Helium Fraction
-		
-		Pe_physical = get_physical_electron_pressure_Mead(mass, Temp, Y, shell_volume, z, little_h)
-		return Pe_physical
-
-	if field == 'v_disp':
-		mass = particle_data[0]['MASS'][mask[0]]
-		velocity = particle_data[0]['VEL '][mask[0]]*Gadget.units.velocity  # v_comoving / sqrt(1+z)
-
-		velocity_comoving = (velocity/(1+z)**0.5).to(u.km/u.s).value
-		v_dispersion = 1/3*mass*(velocity[:, 0]**2 + velocity[:, 1]**2 + velocity[:, 2]**2)/np.sum(mass)
-
-		return v_dispersion
-
-	if field == "Temp":
-		Temp = particle_data[0]['TEMP'][mask[0]]*Gadget.units.Temperature
-		return Temp
-
-	if field=="cdm":
-		rho_cdm = get_physical_density_in_spherical_shell(particle_data[1]['MASS'][mask[1]], shell_volume, z, little_h)
-		return rho_cdm
-
-	if field=="gas":
-		rho_gas = get_physical_density_in_spherical_shell(particle_data[0]['MASS'][mask[0]], shell_volume, z, little_h)
-		return rho_gas
-
-	if field=="matter":
-		rho_gas = get_physical_density_in_spherical_shell(particle_data[0]['MASS'][mask[0]], shell_volume, z, little_h)
-		rho_cdm = get_physical_density_in_spherical_shell(particle_data[1]['MASS'][mask[1]], shell_volume, z, little_h)
-
-		try:
-			rho_star = get_physical_density_in_spherical_shell(particle_data[4]['MASS'][mask[4]], shell_volume, z, little_h)
-		except:
-			rho_star = []
-		return np.concatenate((rho_gas, rho_star, rho_cdm))
 
 
-def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent=False, save_proj=False, filename='', estimator='median'):
+def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent=False, save_proj=False, filename=''):
 	"""Gets field profile for a given halo in physical units
 	To Do: Update Docstring
 
@@ -238,19 +166,24 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 		print(f'Snapshot directory {snap_base} not found!')
 		sys.exit(1)
 	
+	# We want to recenter but remember the method returns a superset of particles
+	# So we need to mask particles before finding potential minimum, otherwise we can end up in 
+	# a nearby halo	
+	distance = g3read.to_spherical(particle_data[1]['POS '], halo_center).T[0]
+	## Create mask for particle outside rmax	
+	mask = distance < halo_radius
 	## Check if the particle at potential min. is close to halo center	
-	pot_min_idx = np.argmin( particle_data[1]['POT '])
-	GPOS = particle_data[1]['POS '][pot_min_idx]
-	
+	pot_min_idx = np.argmin(particle_data[1]['POT '][mask])
+	GPOS = particle_data[1]['POS '][mask][pot_min_idx]
+
 	if not np.all(np.isclose(halo_center, GPOS, atol=1.5)):
 		print('Warning: Halo might be mis-centerd') 
-		print('Delta X={:.2f}, Delta Y={:.2f}, Delta Z={:.2f}'.format(*(halo_center-GPOS)))
+		print('Delta X={:.2f}, Delta Y={:.2f}, Delta Z={:.2f} kpc/h'.format(*(halo_center-GPOS)))
 		if recal_cent is True:
 			print('Recentering...')
 			halo_center = GPOS
 		else:
 			print('Set recal_cent=True to compute a new halo center based on the position of DM particle with min. potential')
-
 
 	profiles_dict = {field: [[], [], []] for field in fields}
 
@@ -310,11 +243,16 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 		this_ptype = 0
 		label = 'Electron Pressure'	
 	
-	x = particle_data[this_ptype]['POS '][:, 0][mask[this_ptype]]/1e3 - halo_center[0]/1e3
-	y = particle_data[this_ptype]['POS '][:, 1][mask[this_ptype]]/1e3 - halo_center[1]/1e3
-	z = particle_data[this_ptype]['POS '][:, 2][mask[this_ptype]]/1e3 - halo_center[2]/1e3
+#	x = particle_data[this_ptype]['POS '][:, 0][mask[this_ptype]]/1e3 - halo_center[0]/1e3
+#	y = particle_data[this_ptype]['POS '][:, 1][mask[this_ptype]]/1e3 - halo_center[1]/1e3
+#	z = particle_data[this_ptype]['POS '][:, 2][mask[this_ptype]]/1e3 - halo_center[2]/1e3
 
 
+	x = particle_data[this_ptype]['POS '][:, 0]/1e3 #- halo_center[0]/1e3
+	y = particle_data[this_ptype]['POS '][:, 1]/1e3 #- halo_center[1]/1e3
+	z = particle_data[this_ptype]['POS '][:, 2]/1e3 #- halo_center[2]/1e3
+	
+	field = np.ones_like(x)
 	## x-y projection
 	ax[0].hist2d(x, y, weights=field, bins=100,  norm = colors.LogNorm(), rasterized=True)
 	ax[0].set(xlabel='$\\Delta$X [cMpc/h]', ylabel='$\\Delta$Y [cMpc/h]')
@@ -329,13 +267,39 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 	ax[2].set(xlabel='$\\Delta$Y [cMpc/h]', ylabel='$\\Delta$Z [cMpc/h]')
 	utils.colorbar(im[3], ax=ax[2])	
 
+	ax[0].scatter(halo_center[0]/1e3, halo_center[1]/1e3, marker='x', c='orangered')
+	ax[1].scatter(halo_center[0]/1e3, halo_center[2]/1e3, marker='x', c='orangered')
+	ax[2].scatter(halo_center[1]/1e3, halo_center[2]/1e3, marker='x', c='orangered')
+
+	ax[0].set_xlim(halo_center[0]/1e3-2*rmax/1e3, halo_center[0]/1e3+2*rmax/1e3)
+	ax[0].set_ylim(halo_center[1]/1e3-2*rmax/1e3, halo_center[1]/1e3+2*rmax/1e3)
+
+	ax[1].set_xlim(halo_center[0]/1e3-2*rmax/1e3, halo_center[0]/1e3+2*rmax/1e3)
+	ax[1].set_ylim(halo_center[2]/1e3-2*rmax/1e3, halo_center[2]/1e3+2*rmax/1e3)
+
+	ax[2].set_xlim(halo_center[1]/1e3-2*rmax/1e3, halo_center[1]/1e3+2*rmax/1e3)
+	ax[2].set_ylim(halo_center[2]/1e3-2*rmax/1e3, halo_center[2]/1e3+2*rmax/1e3)
+
+	circle = plt.Circle((halo_center[0]/1e3, halo_center[1]/1e3), halo_radius/1e3, ls='--', color='orangered', fill=False)
+	ax[0].add_patch(circle)
+	
+	circle = plt.Circle((halo_center[0]/1e3, halo_center[2]/1e3), halo_radius/1e3, ls='--', color='orangered', fill=False)
+	ax[1].add_patch(circle)
+	
+	circle = plt.Circle((halo_center[1]/1e3, halo_center[2]/1e3), halo_radius/1e3, ls='--', color='orangered', fill=False)
+	ax[2].add_patch(circle)
+
 	for i in range(3):
-		circle = plt.Circle((0, 0), halo_radius/1e3, ls='--', color='orangered', fill=False)
-		ax[i].add_patch(circle)
-		ax[i].scatter(0., 0., marker='x', c='orangered')
-		ax[i].set_xlim(-2*rmax/1e3, 2*rmax/1e3)
-		ax[i].set_ylim(-2*rmax/1e3, 2*rmax/1e3)
+#		ax[i].scatter(0., 0., marker='x', c='orangered')
 		ax[i].set_aspect('equal')
+
+#	for i in range(3):
+#		circle = plt.Circle((0, 0), halo_radius/1e3, ls='--', color='orangered', fill=False)
+#		ax[i].add_patch(circle)
+#		ax[i].scatter(0., 0., marker='x', c='orangered')
+#		ax[i].set_xlim(-2*rmax/1e3, 2*rmax/1e3)
+#		ax[i].set_ylim(-2*rmax/1e3, 2*rmax/1e3)
+#		ax[i].set_aspect('equal')
 	
 	return binned_field, bin_centers, npart
 
