@@ -8,7 +8,7 @@ import scipy.stats
 import sys
 from tqdm import tqdm
 
-
+import astropy.cosmology.units as cu
 import astropy.units as u
 import astropy.constants as constants
 import g3read
@@ -72,7 +72,7 @@ def get_comoving_electron_pressure(rho, Temp, Y):
 	mu = get_mean_mass_per_particle(Y)
 	ngas = rho/(mu*constants.m_p)
 	P_thermal = ngas*constants.k_B*Temp
-	Pe = ((4-2*Y)/(8-5*Y)*P_thermal).to(u.keV/u.cm**3)  # In comoving keV/cm^3 h^2
+	Pe = ((4-2*Y)/(8-5*Y)*P_thermal).to(u.keV/u.cm**3*cu.littleh**2)  # In comoving keV/cm^3 h^2
 
 	return Pe
 
@@ -85,7 +85,7 @@ def get_comoving_electron_pressure_Mead(mass, Temp, Y, volume):
 	Ne = mass/constants.m_p/mu_e  # No. of electrons
 	Pe = Ne*constants.k_B*Temp/volume
 
-	Pe = Pe.to(u.keV/u.cm**3)
+	Pe = Pe.to(u.keV/u.cm**3*cu.littleh**2)
 
 	return Pe
 
