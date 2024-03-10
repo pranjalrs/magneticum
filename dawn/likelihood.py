@@ -1,4 +1,8 @@
 import numpy as np
+import warnings
+
+import astropy.units as u
+import astropy.cosmology.units as cu
 
 class Likelihood:
 	'''
@@ -6,7 +10,7 @@ class Likelihood:
 
 	Attributes:
 	- chi2_type (str): Type of chi-squared calculation.
-	- fit_par (list): List of parameter names to be fitted.
+	- fit_params (list): List of parameter names to be fitted.
 	- model (object): The model used to evaluate the likelihood.
 	- profile_dict (dict): Dictionary containing the profiles of different fields.
 	- fields (list): List of fields for which the likelihood is calculated.
@@ -24,35 +28,51 @@ class Likelihood:
 
 	'''
 
-	def __init__(self, profile_container_dict, model, fit_params, priors, chi2_type='log'):
+	def __init__(self, profile_container_dict, model, fit_params, priors, chi2_type='log', return_blobs=True):
 		'''
+		Initializes the Likelihood class.
+
 		Parameters:
 		- profile_container_dict (dict): Dictionary containing the profiles of different fields.
 		- model (object): The model used to evaluate the likelihood, should be a HaloProfile instance.
 		- fit_params (list): List of parameter names to be fitted.
 		- priors (dict): Dictionary containing the prior ranges for the parameters.
 		- chi2_type (str, optional): Type of chi-squared calculation. Default is 'log'.
+		- return_blobs (bool, optional): Flag indicating if additional information should be returned. Default is True.
 		'''
 		self.chi2_type = chi2_type
-		self.fit_par = fit_params
+		self.fit_params = fit_params
 		self.model = model
-		self.profile_dict = profile_container_dict
-
-		self.fields = profile_container_dict.keys()
-		assert all([field in ['rho_dm', 'rho_gas', 'Pe', 'Temp'] for field in self.fields]), 'Fields should be among ["rho_dm", "rho_gas", "Pe", "Temp"]'
 
 		self.priors = self._init_priors(fit_params, priors)
-		self.mvir = self.profile_dict[self.fields[0]].mvir
+		self.return_blobs = return_blobs
 
-		if 'rho_gas' in self.fields: 
-			self._model_args_return_rho = True
-		else: 
-			self._model_args_return_rho = False
+		self.init_data(profile_container_dict)
 
-		if 'Temp' in self.fields: 
-			self._model_args_return_Temp = True
-		else: 
-			self._model_args_return_Temp = False
+	def init_data(self, container_dict):
+		'''
+		Initializes the data for likelihood calculation.
+
+		Parameters:
+		- container_dict (dict): Dictionary containing the profiles of different fields.
+
+		Returns:
+		- list: List of field names.
+
+		Raises:
+		- AssertionError: If fields are not among ["rho_dm", "rho_gas", "Pe", "Temp"].
+		'''
+		self.profile_dict = container_dict
+		self.fields = list(container_dict.keys())
+
+		assert all([field in ['rho_dm', 'rho_gas', 'Pe', 'Temp'] for field in self.fields]), 'Fields should be among ["rho_dm", "rho_gas", "Pe", "Temp"]'
+
+		self.mvir = self.profile_dict[self.fields[0]].mvir * u.Msun / cu.littleh
+
+		self._model_args_return_rho = True if 'rho_gas' in self.fields else False
+		self._model_args_return_Temp = True if 'Temp' in self.fields else False
+
+		return list(self.profile_dict.keys())
 
 	def __call__(self, theta):
 		'''
@@ -63,7 +83,6 @@ class Likelihood:
 
 		Returns:
 		- float: The log likelihood value.
-
 		'''
 		return self.log_likelihood(theta)
 
@@ -76,23 +95,32 @@ class Likelihood:
 
 		Returns:
 		- float: The log likelihood value.
-
 		'''
-		for param in self.fit_params:
-			if not self.priors[param][0] <= theta[param] <= self.priors[param][1]:
-				return -np.inf
+		for i, param in enumerate(self.fit_params):
+			if not self.priors[param][0] <= theta[i] <= self.priors[param][1]:
+			
+				if self.return_blobs:
+					return -np.inf, -np.inf, -np.inf, -np.inf, -np.inf
+				else:
+					return -np.inf
 
 		model_prediction = self.eval_model(theta)
 
-		chi2 = 0
+		chi2 = {'rho_dm': 0, 'rho_gas': 0, 'Temp': 0, 'Pe': 0}
+
 		for field in self.fields:
-			data = self.profile_container_dict[field].profile
-			sigma_prof = self.profile_container_dict[field].sigma_prof
-			sigma_lnprof = self.profile_container_dict[field].sigma_lnprof
+			data = self.profile_dict[field].profile
+			sigma_prof = self.profile_dict[field].sigma_prof
+			sigma_lnprof = self.profile_dict[field].sigma_lnprof
 
-			chi2 += self.eval_chi2(data, model_prediction[field], sigma_prof, sigma_lnprof)
+			chi2[field] = self.eval_chi2(data, model_prediction[field].value, sigma_prof, sigma_lnprof)
 
-		return -0.5*chi2
+		if self.return_blobs:
+			return -0.5 * np.sum(list(chi2.values())), -0.5 * chi2['rho_dm'], -0.5 * chi2['rho_gas'], -0.5 * chi2['Temp'], -0.5 * chi2['Pe']
+
+		else:
+			return -0.5 * np.sum(list(chi2.values()))
+
 
 	def eval_model(self, theta):
 		'''
@@ -103,29 +131,23 @@ class Likelihood:
 
 		Returns:
 		- dict: Dictionary containing the model predicted values for each field.
-
 		'''
 		self.model.update_param(self.fit_params, theta)
 
-		model_prediction = {'rho_dm': None,
-							'Pe': None,
-							'rho_gas': None,
-							'Temp': None}
-
-		if 'rho_dm' in self.fields:
-			rbins = self.profile_dict['rho_dm'].rbins
-			model_prediction['rho_dm'] = self.model.get_rho_dm_profile_interpolated(self.mvir, r_bins=rbins, z=0.)[0]
-
-		rbins = self.profile_dict['rho_gas'].rbins
-		profs, _ = self.get_Pe_profile_interpolated(self.mvir, r_bins=rbins, z=0., 
-													return_rho=self._model_args_return_rho, return_Temp=self._model_args_return_Temp)
+		model_prediction = {'rho_dm': None, 'Pe': None, 'rho_gas': None, 'Temp': None}
 
 		for field in self.fields:
-			if field == 'rho_dm': 
-				continue
-			model_prediction[field] = profs[field]
+			if field == 'rho_dm':
+				rbins = self.profile_dict['rho_dm'].rbins
+				model_prediction['rho_dm'], _ = self.model.get_rho_dm_profile_interpolated(self.mvir, r_bins=rbins, z=0.)
 
-		return model_prediction
+			else:
+				rbins = self.profile_dict[field].rbins
+				profs, _ = self.model.get_Pe_profile_interpolated(self.mvir, r_bins=rbins, z=0.,
+															return_rho=self._model_args_return_rho,
+															return_Temp=self._model_args_return_Temp)
+				model_prediction[field] = profs[field]
+
 
 	def eval_chi2(self, data, model, sigma=None, lnsigma=None):
 		'''
@@ -139,7 +161,6 @@ class Likelihood:
 
 		Returns:
 		- float: The chi-squared value.
-
 		'''
 		if self.chi2_type == 'log':
 			num = np.log(data / model)
@@ -172,14 +193,13 @@ class Likelihood:
 		Raises:
 		- ValueError: If a parameter in `params` does not have a prior in `priors`.
 		- Warning: If additional parameters are found in `priors` that are not in `params`.
-
 		'''
 		for param in params:
 			if param not in priors:
 				raise ValueError(f'No prior found for parameter {param}')
-		
+
 		for param in priors:
 			if param not in params:
-				raise Warning(f'Prior dictionary contains additional parameter `{param}` !')
+				warnings.warn(f'Prior dictionary contains additional parameter `{param}` !')
 
 		return priors
