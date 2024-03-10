@@ -21,12 +21,9 @@ import emcee
 import glob
 import lmfit
 
-import sys
-sys.path.append('../core/')
 
-from analytic_profile import Profile
-import post_processing
-from fitting_utils import get_halo_data
+from dawn.halo_profile import HaloProfile
+from dawn.sim_toolkit.profile_handler import HaloProfileHandler
 import ipdb
 
 #####-------------- Parse Args --------------#####
@@ -55,7 +52,7 @@ def likelihood(theory_prof, args_dict):
 	sigma_lnprof = args_dict['sigma_lnprof']
 	chi2 = args_dict['chi2_type']
 	return_sum = args_dict['return_sum']
-    
+
 	if chi2 == 'log':
 		num = np.log(sim_prof / theory_prof.value)
 		denom = sigma_lnprof
@@ -171,55 +168,21 @@ std_dev = {'lognorm_rho': 0.1,
 #####-------------- Load Data --------------#####
 files = glob.glob('../../magneticum-data/data/profiles_median/*/cdm*.pkl')
 
-rho_dm_sim= []
-sigma_rho_dm = []
-sigma_lnrho_dm = []
-r_bins_sim = []
-Mvir_sim = []
-Rvir_sim = []
+profile_handler = HaloProfileHandler(['rho_dm'], files)
 
-conversion_factor = (1*u.Msun/u.kpc**3).to(u.GeV/u.cm**3, u.mass_energy()).value
-for f in files:
-	this_prof_data = joblib.load(f)
-	for halo in this_prof_data:
+data = profile_handler.get_masked_profile(10**mmin, 10**mmax, 10, 'rho_dm')
 
-		r = halo['fields']['cdm'][1]/halo['rvir']
-		profile = halo['fields']['cdm'][0]
-		npart = halo['fields']['cdm'][2]
-		sigma_prof = profile/npart**0.5        
-		sigma_lnprof = sigma_prof/profile
-
-		# These should be after all the if statements
-		rho_dm_sim.append(profile)
-		sigma_rho_dm.append(sigma_prof)
-		sigma_lnrho_dm.append(sigma_lnprof)
-		r_bins_sim.append(r)
-
-		Rvir_sim.append(halo['rvir'])
-		Mvir_sim.append(halo['mvir'])
-
-Mvir_sim = np.array(Mvir_sim, dtype='float64')
-Rvir_sim = np.array(Rvir_sim, dtype='float64')
-
-rho_dm_sim = np.array(rho_dm_sim, dtype='float64')
-sigma_rho_dm = np.array(sigma_rho_dm, dtype='float64')
-sigma_lnrho_dm = np.array(sigma_lnrho_dm, dtype='float64')
-r_bins_sim = np.array(r_bins_sim, dtype='float64')
-
-mask = (Mvir_sim>=10**(mmin)) & (Mvir_sim<10**mmax)
-# print(f'{np.log10(Mvir_sim[mask].min()):.2f}, {np.log10(Mvir_sim[mask].max()):.2f}')
-
-rho_dm_sim = rho_dm_sim[mask]
-sigma_rho_dm = sigma_rho_dm[mask]
-sigma_lnrho_dm = sigma_lnrho_dm[mask]
-Mvir_sim = Mvir_sim[mask]
-r_bins_sim = r_bins_sim[mask]
+rho_dm_sim = data.profile
+sigma_rho_dm = data.sigma_prof
+sigma_lnrho_dm = data.sigma_lnprof
+Mvir_sim = data.mvir
+Rvir_sim = data.rvir
+r_bins_sim = data.rbins
 
 print('Finished processing simulation data...')
-print(f'Using {np.sum(mask)} halos for fit...')
 
 #####-------------- Prepare for MCMC --------------#####
-fitter = Profile(use_interp=False, imass_conc=2)
+fitter = HaloProfile(use_interp=False, imass_conc=2)
 print('Initialized profile fitter ...')
 
 
@@ -241,7 +204,7 @@ fig = plt.figure()
 map_array = np.linspace(1, 20, 50)
 colors = plt.cm.viridis(np.linspace(0, 1, 50))
 
-for i in tqdm(range(sum(mask))):
+for i in tqdm(range(Mvir_sim.size)):
 	this_rvir = Rvir_sim[i]
 	this_mvir = Mvir_sim[i]
 	this_r_bins = r_bins_sim[i]
