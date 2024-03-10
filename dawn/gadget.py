@@ -7,7 +7,7 @@ class GadgetUnits():
 		self.length = 1*u.kpc/cu.littleh  # kpc/h
 		self.mass = 1e10*u.Msun/cu.littleh  # Msun/h
 		self.velocity = 1*u.km/u.second
-		self.time = (self.length/self.velocity).to(u.second)
+#		self.time = (self.length/self.velocity).to(u.second)
 		self.Temperature = 1*u.K
 
 		self.mass_density = self.mass/self.length**3
