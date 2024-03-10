@@ -218,8 +218,6 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 	rmin, rmax = 0.01*halo_radius, 1*halo_radius
 	bins = np.logspace(np.log10(rmin), np.log10(rmax), 20)  # Radial bin edges
 
-	import ipdb
-	ipdb.set_trace()
 	## g3read.to_spherical returns an array of [r, theta, phi]
 	# Compute particle pos w.r.t. halo center (as a fraction of Rvir)
 	particle_pos = {p: None for p in ptype}
