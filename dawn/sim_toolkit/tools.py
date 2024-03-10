@@ -127,7 +127,7 @@ def get_physical_electron_pressure(rho, Temp, Y, z, little_h):
 
 
 
-def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent=False, save_proj=False, filename=''):
+def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent=False, save_proj=False, is_dmo=False, filename=''):
 	"""Gets field profile for a given halo in physical units
 	To Do: Update Docstring
 
@@ -160,30 +160,36 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 		ptype += [4]
 
 	try:
-		particle_data = g3read.read_particles_in_box(snap_base, halo_center, halo_radius, ['POT ', 'POS ', 'TEMP', 'MASS', 'VEL ', 'RHO ', 'Zs  '], ptype, use_super_indexes=True)
+		if is_dmo is True:
+			blocks = ['POS ', 'MASS']
+
+		else: blocks = ['POT ', 'POS ', 'TEMP', 'MASS', 'VEL ', 'RHO ', 'Zs  ']
+		particle_data = g3read.read_particles_in_box(snap_base, halo_center, halo_radius, blocks, ptype, use_super_indexes=True)
 
 	except FileNotFoundError:
 		print(f'Snapshot directory {snap_base} not found!')
 		sys.exit(1)
 	
-	# We want to recenter but remember the method returns a superset of particles
-	# So we need to mask particles before finding potential minimum, otherwise we can end up in 
-	# a nearby halo	
-	distance = g3read.to_spherical(particle_data[1]['POS '], halo_center).T[0]
-	## Create mask for particle outside rmax	
-	mask = distance < halo_radius
-	## Check if the particle at potential min. is close to halo center	
-	pot_min_idx = np.argmin(particle_data[1]['POT '][mask])
-	GPOS = particle_data[1]['POS '][mask][pot_min_idx]
+	# DMO particles don't have 'POT ' block so cannot recenter
+	if is_dmo is False:
+		# We want to recenter but remember the method returns a superset of particles
+		# So we need to mask particles before finding potential minimum, otherwise we can end up in 
+		# a nearby halo	
+		distance = g3read.to_spherical(particle_data[1]['POS '], halo_center).T[0]
+		## Create mask for particle outside rmax	
+		mask = distance < halo_radius
+		## Check if the particle at potential min. is close to halo center	
+		pot_min_idx = np.argmin(particle_data[1]['POT '][mask])
+		GPOS = particle_data[1]['POS '][mask][pot_min_idx]
 
-	if not np.all(np.isclose(halo_center, GPOS, atol=1.5)):
-		print('Warning: Halo might be mis-centerd') 
-		print('Delta X={:.2f}, Delta Y={:.2f}, Delta Z={:.2f} kpc/h'.format(*(halo_center-GPOS)))
-		if recal_cent is True:
+		if not np.all(np.isclose(halo_center, GPOS, atol=1.5)):
+			print('Warning: Halo might be mis-centerd') 
+			print('Delta X={:.2f}, Delta Y={:.2f}, Delta Z={:.2f} kpc/h'.format(*(halo_center-GPOS)))
 			print('Recentering...')
-			halo_center = GPOS
-		else:
-			print('Set recal_cent=True to compute a new halo center based on the position of DM particle with min. potential')
+			if recal_cent is True:
+				halo_center = GPOS
+			else:
+				print('Set recal_cent=True to compute a new halo center based on the position of DM particle with min. potential')
 
 	profiles_dict = {field: [[], [], []] for field in fields}
 
@@ -212,10 +218,12 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 	rmin, rmax = 0.01*halo_radius, 1*halo_radius
 	bins = np.logspace(np.log10(rmin), np.log10(rmax), 20)  # Radial bin edges
 
+	import ipdb
+	ipdb.set_trace()
 	## g3read.to_spherical returns an array of [r, theta, phi]
 	# Compute particle pos w.r.t. halo center (as a fraction of Rvir)
-	particle_pos = {}
-	mask = {}
+	particle_pos = {p: None for p in ptype}
+	mask = {p: None for p in ptype}
 	for this_ptype in ptype:
 		if particle_data[this_ptype]['POS '] is not None:
 			distance = g3read.to_spherical(particle_data[this_ptype]['POS '], halo_center).T[0]
@@ -223,9 +231,6 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 
 			## Create mask for particle outside rmax	
 			mask[this_ptype] = distance < rmax
-		else:
-			ptype.remove(this_ptype)
-
 
 	# To assign e.g, pressure to each particle we also need its the volume of the shell it is in
 	# This is only required for make 2D maps
