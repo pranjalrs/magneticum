@@ -49,7 +49,7 @@ field = ['rho_dm']
 
 munit = u.Msun/cu.littleh
 #####-------------- Likelihood --------------#####
-def likelihood(theory_prof, field, args_dict):
+def likelihood(theory_prof, args_dict):
 	sim_prof = args_dict['data']
 	sigma_prof = args_dict['sigma_prof']
 	sigma_lnprof = args_dict['sigma_lnprof']
@@ -99,7 +99,7 @@ def joint_likelihood(x, args_dict):
 	like_rho_dm, like_rho, like_Temp, like_Pe = 0., 0., 0., 0.
 
 	if 'rho_dm' in field:
-		like_rho_dm = likelihood(rho_dm_theory, 'rho_dm', args_dict)
+		like_rho_dm = likelihood(rho_dm_theory, args_dict)
 
 	## Check if the the mass enclosed in the profile is consistent with 
 	## The halo mass in the catalog
@@ -160,7 +160,7 @@ def get_lmfit_sol(x0, bounds, args_dict):
 
 
 bounds = {'lognorm_rho': [1, 20],
-			'conc_param': [0.2, 20]}
+			'conc_param': [0.2, 50]}
 
 fid_val = {'lognorm_rho': 10,
 			'conc_param': 7}
@@ -169,7 +169,7 @@ std_dev = {'lognorm_rho': 0.1,
 			'conc_param': 0.1}
 
 #####-------------- Load Data --------------#####
-files = glob.glob('/home/u31/pranjalrs/*.pkl')
+files = glob.glob('../../magneticum-data/data/profiles_median/*/cdm*.pkl')
 
 rho_dm_sim= []
 sigma_rho_dm = []
@@ -207,7 +207,7 @@ sigma_lnrho_dm = np.array(sigma_lnrho_dm, dtype='float64')
 r_bins_sim = np.array(r_bins_sim, dtype='float64')
 
 mask = (Mvir_sim>=10**(mmin)) & (Mvir_sim<10**mmax)
-print(f'{np.log10(Mvir_sim[mask].min()):.2f}, {np.log10(Mvir_sim[mask].max()):.2f}')
+# print(f'{np.log10(Mvir_sim[mask].min()):.2f}, {np.log10(Mvir_sim[mask].max()):.2f}')
 
 rho_dm_sim = rho_dm_sim[mask]
 sigma_rho_dm = sigma_rho_dm[mask]
@@ -233,7 +233,7 @@ print(f'Using Likelihood for {field} field(s)')
 
 
 #####-------------- RUN MCMC --------------#####
-base_path = '../../magneticum-data/data/DM_conc/test/'
+base_path = '../../magneticum-data/data/DM_conc/'
 fit_result = []
 
 fig = plt.figure()
@@ -247,7 +247,7 @@ for i in tqdm(range(sum(mask))):
 	this_r_bins = r_bins_sim[i]
 
 	## Apply cut on rmin
-	idx = (this_r_bins*this_rvir>10) & (this_r_bins<=1.)
+	idx = (this_r_bins*this_rvir>10.) & (this_r_bins<=1.)
 	this_r_bins = this_r_bins[idx]
 	this_rho_dm_sim = rho_dm_sim[i][idx] # Don't change variable names; called in likelihood using `globals()`
 	this_sigma_rho_dm = sigma_rho_dm[i][idx]
