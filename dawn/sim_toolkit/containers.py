@@ -12,7 +12,7 @@ class ProfileContainer():
         sigma_lnprof (float): The natural logarithm of the profile standard deviation.
     """
 
-    def __init__(self, mvir, rvir, profile, profile_rescale, rbins, sigma_prof, sigma_lnprof):
+    def __init__(self, mvir, rvir, profile, profile_rescale, rbins, sigma_prof, sigma_lnprof, units=None):
         self.mvir = mvir
         self.rvir = rvir
         self.profile = profile
@@ -20,3 +20,4 @@ class ProfileContainer():
         self.rbins = rbins
         self.sigma_prof = sigma_prof
         self.sigma_lnprof = sigma_lnprof
+        self.units = units

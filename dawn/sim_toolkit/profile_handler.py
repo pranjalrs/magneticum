@@ -37,7 +37,7 @@ class HaloProfileHandler():
 
 
 	@classmethod
-	def _get_profiles(cls, data, fields):
+	def _get_profiles(cls, data, field):
 		'''
 		Extracts the halo profiles from the loaded data.
 
@@ -56,7 +56,7 @@ class HaloProfileHandler():
 		mvir, rvir = [], []
 
 		for halo in data:
-			prof, r, prof_rescale, sigma, lnsigma = cls.read_halo_data(halo, fields, return_sigma=True)
+			prof, r, prof_rescale, sigma, lnsigma = cls.read_halo_data(halo, field, return_sigma=True)
 			profile.append(prof)
 			rescale.append(prof_rescale)
 			rbins.append(r)
@@ -71,6 +71,7 @@ class HaloProfileHandler():
 			'mvir': np.array(mvir),
 			'rvir': np.array(rvir),
 			'profile': np.array(profile),
+			# 'units': prof.unit,
 			'profile_rescale': np.array(rescale),
 			'rbins': np.array(rbins),
 			'sigma_prof': np.array(sigma_prof),
@@ -162,11 +163,12 @@ class HaloProfileHandler():
 		rmax = 1. # in r/Rvir
 		r_mask = (r >= rmin[:, np.newaxis]) & (r <= rmax)
 	
-		profile_args = {'mvir': mvir, 'rvir': rvir, 
-				  		'profile': profile*r_mask, 
-						'profile_rescale': profile_rescale*r_mask, 
-						'rbins': r*r_mask, 
-						'sigma_prof': sigma_prof*r_mask, 
+		profile_args = {'mvir': mvir, 'rvir': rvir,
+				  		'profile': profile*r_mask,
+						# 'units': profile_container.units,
+						'profile_rescale': profile_rescale*r_mask,
+						'rbins': r*r_mask,
+						'sigma_prof': sigma_prof*r_mask,
 						'sigma_lnprof': sigma_lnprof*r_mask}
 
 		return ProfileContainer(**profile_args)

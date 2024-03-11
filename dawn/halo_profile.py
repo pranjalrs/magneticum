@@ -9,7 +9,7 @@ import astropy.units as u
 import astropy.constants as const
 import astropy.cosmology.units as cu
 
-from interpolator import ProfileInterpolator
+from dawn.interpolator import ProfileInterpolator
 
 class HaloProfile():
 	def __init__(self, **kwargs) -> None:
@@ -524,6 +524,10 @@ class HaloProfile():
 			self._rho_prof_interpolator[z] = ProfileInterpolator(Mvirs.value, r_bins, rho_profs)
 			self._Temp_prof_interpolator[z] = ProfileInterpolator(Mvirs.value, r_bins, Temp_profs)
 
+		self._rho_dm_prof_interpolator_units = this_rho_dm_prof.unit
+		self._Pe_prof_interpolator_units = this_Pe_prof.unit
+		self._rho_prof_interpolator_units = this_rho_prof.unit
+		self._Temp_prof_interpolator_units = this_rho_prof.unit
 
 	def _test_prof_interpolator(self, n=1000):
 		if self.use_interp is False:
