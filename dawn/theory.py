@@ -5,9 +5,8 @@ from scipy.special import sici
 import camb
 import pyhalomodel
 
-import utils
-from mass_concentration import get_mass_concentration_relation
-import ipdb
+import dawn.utils as utils
+from dawn.mass_concentration import get_mass_concentration_relation
 
 def get_CLASS_Pk(k_sim, input_dict=None, binned=False, z=0.0):
 	'''Returns Pk for WMAP7 cosmology, optionally a dictionary of cosmo
@@ -260,12 +259,18 @@ def get_halomodel_Pk(input_cosmo={}, z=0., settings={}):
 	hmod = setup['hmod']
 	camb_results = setup['camb_results']
 
+	# Get linear matter power spectrum from CAMB
+	Pk_lin_interpolator = camb_results.get_matter_power_interpolator(nonlinear=False)
+	Pk_linear = Pk_lin_interpolator.P(z, ks) # Single out the linear P(k) interpolator and evaluate linear power
+
+	pack = ks, Pk_linear, Ms, sigmaRs
 	marginalize_mc_scatter = settings.get('marginalize_mc_scatter', False)
 	use_KDE = settings.get('use_KDE', False)
 	print('Marginalize over c-M scatter:', marginalize_mc_scatter)
 
 	# Create NFW profile
 	Uk = win_NFW(ks, rvs, cs)
+	Uk_sq = win_NFW(ks, rvs, cs)
 
 	# Marginalize over c-M relation scatter
 	if marginalize_mc_scatter:
@@ -274,22 +279,27 @@ def get_halomodel_Pk(input_cosmo={}, z=0., settings={}):
 			if KDE is None:
 				raise ValueError('KDE must be provided if use_KDE is True') 
 			# Use KDE to marginalize over the concentration-mass relation scatter
-			Uk = win_NFW_marginalized(use_KDE=use_KDE, KDE=KDE, z=z, **setup)
+			Uk = win_NFW_marginalized(term='Uk', use_KDE=use_KDE, KDE=KDE, z=z, **setup) # <Uk>
+			Uk_sq = win_NFW_marginalized(term='Uk_sq', use_KDE=use_KDE, KDE=KDE, z=z, **setup) # <Uk^2>^1/2
 
 		else:
-			Uk = win_NFW_marginalized(z=z, **setup)
+			Uk = win_NFW_marginalized(term='Uk', z=z, **setup)
+			Uk_sq = win_NFW_marginalized(term='Uk_sq', z=z, **setup)
+
+		# Get 1-halo term
+		matter_profile = pyhalomodel.profile.Fourier(ks, Ms, Uk_sq, amplitude=Ms, normalisation=hmod.rhom, mass_tracer=True) 
+		_, Pk_1h, _ = hmod.power_spectrum(*pack, {'m': matter_profile})#, simple_twohalo=True)
+
+		# Get 2-halo term
+		matter_profile = pyhalomodel.profile.Fourier(ks, Ms, Uk, amplitude=Ms, normalisation=hmod.rhom, mass_tracer=True) 
+		Pk_2h, _, _ = hmod.power_spectrum(*pack, {'m': matter_profile})#, simple_twohalo=True)
+
+		Pk_hm = {'m-m': Pk_1h + Pk_2h}
 
 	else:
 		Uk = win_NFW(ks, rvs, cs)
-
-	matter_profile = pyhalomodel.profile.Fourier(ks, Ms, Uk, amplitude=Ms, normalisation=hmod.rhom, mass_tracer=True) 
-
-	# Get linear matter power spectrum from CAMB
-	Pk_lin_interpolator = camb_results.get_matter_power_interpolator(nonlinear=False)
-	Pk_linear = Pk_lin_interpolator.P(z, ks) # Single out the linear P(k) interpolator and evaluate linear power
-
-	pack = ks, Pk_linear, Ms, sigmaRs
-	Pk_2h, Pk_1h, Pk_hm = hmod.power_spectrum(*pack, {'m': matter_profile})#, simple_twohalo=True)
+		matter_profile = pyhalomodel.profile.Fourier(ks, Ms, Uk, amplitude=Ms, normalisation=hmod.rhom, mass_tracer=True) 
+		Pk_2h, Pk_1h, Pk_hm = hmod.power_spectrum(*pack, {'m': matter_profile})#, simple_twohalo=True)
 
 	return Pk_hm, Pk_2h, Pk_1h, ks
 
@@ -358,20 +368,21 @@ def setup_halomodel(input_cosmo={}, z=0., settings={}):
 
 	return setup
 
-def win_NFW_marginalized(ks, cs, sigma_lnc, mc_relation, hmod, z, Ms=None, use_KDE=False, KDE=None, **_):
+def win_NFW_marginalized(term, ks, cs, sigma_lnc, mc_relation, hmod, z, Ms=None, use_KDE=False, KDE=None, **_):
 	'''
 	Calculates the marginalized window function for the NFW profile.
 
 	Parameters:
-	- ks (array-like): array of wavenumbers
-	- cs (array-like): array of concentrations
-	- sigma_lnc (float): scatter in the concentration-mass relation
-	- mc_relation (MassConcentrationRelation): MassConcentrationRelation class object
-	- hmod (object): pyhalomodel model object
-	- z (float): redshift
-	- Ms (array-like, optional): array of halo masses (default: None)
-	- use_KDE (bool, optional): flag to use Kernel Density Estimation (default: False)
-	- KDE (object, optional): Kernel Density Estimation object (default: None)
+	- term (str): Profile that enters the integral, either 'Uk' or 'Uk_sq'.
+	- ks (array-like): Array of wavenumbers.
+	- cs (array-like): Array of concentrations.
+	- sigma_lnc (float): Scatter in the concentration-mass relation.
+	- mc_relation (MassConcentrationRelation): MassConcentrationRelation class object.
+	- hmod (object): pyhalomodel model object.
+	- z (float): Redshift.
+	- Ms (array-like, optional): Array of halo masses (default: None).
+	- use_KDE (bool, optional): Flag to use Kernel Density Estimation (default: False).
+	- KDE (object, optional): Kernel Density Estimation object (default: None).
 
 	Returns:
 	- Uk (array-like): The marginalized window function array with shape (k, cs.size).
@@ -399,11 +410,15 @@ def win_NFW_marginalized(ks, cs, sigma_lnc, mc_relation, hmod, z, Ms=None, use_K
 			# Compute the lognormal distribution
 			ln_c_pdf = utils.lognormal_pdf(concentration_grid, np.log(this_cbar), sigma_lnc)
 
-		integrand = Uk_grid**2 * ln_c_pdf
-
-		# Need to flip so that the grid is in increasing order
-		# Otherwise integration is negative
-		Uk[:, i] = np.trapz(np.flip(integrand, axis=1), np.flip(concentration_grid, axis=1), axis=1)**0.5
+		if term == 'Uk':
+			integrand = Uk_grid * ln_c_pdf
+			# Need to flip so that the grid is in increasing order
+			# Otherwise integration is negative
+			Uk[:, i] = np.trapz(np.flip(integrand, axis=1), np.flip(concentration_grid, axis=1), axis=1)
+		
+		elif term == 'Uk_sq':
+			integrand = Uk_grid**2 * ln_c_pdf
+			Uk[:, i] = np.trapz(np.flip(integrand, axis=1), np.flip(concentration_grid, axis=1), axis=1)**0.5
 
 	return Uk
 
