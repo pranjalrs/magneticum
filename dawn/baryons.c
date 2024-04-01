@@ -15278,6 +15278,10 @@ void set_bary_parameters_to_BAHAMAS_T78()
 
 void set_bary_parameters_to_BAHAMAS_T80()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 15;
   bary.Nk_bins = 380;
@@ -15359,6 +15363,10 @@ void set_bary_parameters_to_BAHAMAS_T80()
 
 void set_bary_parameters_to_Magneticum_WMAP7()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 7;
   bary.Nk_bins = 325;
@@ -15440,6 +15448,10 @@ void set_bary_parameters_to_Magneticum_WMAP7()
 
 void set_bary_parameters_to_Magneticum_C1()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 10;
   bary.Nk_bins = 325;
@@ -15521,6 +15533,10 @@ void set_bary_parameters_to_Magneticum_C1()
 
 void set_bary_parameters_to_Magneticum_C2()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 10;
   bary.Nk_bins = 325;
@@ -15602,6 +15618,10 @@ void set_bary_parameters_to_Magneticum_C2()
 
 void set_bary_parameters_to_Magneticum_C3()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 10;
   bary.Nk_bins = 325;
@@ -15683,6 +15703,10 @@ void set_bary_parameters_to_Magneticum_C3()
 
 void set_bary_parameters_to_Magneticum_C4()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 10;
   bary.Nk_bins = 325;
@@ -15764,6 +15788,10 @@ void set_bary_parameters_to_Magneticum_C4()
 
 void set_bary_parameters_to_Magneticum_C5()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 10;
   bary.Nk_bins = 325;
@@ -15845,6 +15873,10 @@ void set_bary_parameters_to_Magneticum_C5()
 
 void set_bary_parameters_to_Magneticum_C6()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 10;
   bary.Nk_bins = 325;
@@ -15926,6 +15958,10 @@ void set_bary_parameters_to_Magneticum_C6()
 
 void set_bary_parameters_to_Magneticum_C7()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 10;
   bary.Nk_bins = 325;
@@ -16007,6 +16043,10 @@ void set_bary_parameters_to_Magneticum_C7()
 
 void set_bary_parameters_to_Magneticum_C9()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 10;
   bary.Nk_bins = 325;
@@ -16088,6 +16128,10 @@ void set_bary_parameters_to_Magneticum_C9()
 
 void set_bary_parameters_to_Magneticum_C10()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 10;
   bary.Nk_bins = 325;
@@ -16169,6 +16213,10 @@ void set_bary_parameters_to_Magneticum_C10()
 
 void set_bary_parameters_to_Magneticum_C11()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 10;
   bary.Nk_bins = 325;
@@ -16250,6 +16298,10 @@ void set_bary_parameters_to_Magneticum_C11()
 
 void set_bary_parameters_to_Magneticum_C12()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 10;
   bary.Nk_bins = 325;
@@ -16331,6 +16383,10 @@ void set_bary_parameters_to_Magneticum_C12()
 
 void set_bary_parameters_to_Magneticum_C13()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 10;
   bary.Nk_bins = 325;
@@ -16412,6 +16468,10 @@ void set_bary_parameters_to_Magneticum_C13()
 
 void set_bary_parameters_to_Magneticum_C14()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 10;
   bary.Nk_bins = 325;
@@ -16493,6 +16553,10 @@ void set_bary_parameters_to_Magneticum_C14()
 
 void set_bary_parameters_to_Magneticum_C15()
 {
+  if(bary.a_bins != NULL || bary.logk_bins != NULL || bary.log_PkR != NULL || bary.interp2d != NULL)
+  {
+    reset_bary_struct();
+  }
   bary.is_Pk_bary = 1;
   bary.Na_bins = 10;
   bary.Nk_bins = 325;
