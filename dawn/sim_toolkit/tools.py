@@ -155,7 +155,7 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 	if not isinstance(fields, list): fields = [fields]
 	utils._assert_correct_field(fields)
 
-	ptype = [0, 1]
+	ptype = [0, 1, 2]
 	if 'matter' in fields:
 		ptype += [4]
 
@@ -200,7 +200,7 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 	else:
 		ax = [None]*len(fields)
 	for i, field in enumerate(fields):
-		profile, r, npart = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, ax[i])
+		profile, r, npart = _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field, is_dmo, ax[i])
 
 
 		profiles_dict[field][0] = profile
@@ -214,7 +214,7 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 
 
 
-def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field_type, ax):
+def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field_type, is_dmo, ax):
 	rmin, rmax = 0.01*halo_radius, 1*halo_radius
 	bins = np.logspace(np.log10(rmin), np.log10(rmax), 20)  # Radial bin edges
 
@@ -232,7 +232,7 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 
 	# To assign e.g, pressure to each particle we also need its the volume of the shell it is in
 	# This is only required for make 2D maps
-	field, binned_field, bin_centers, npart = _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask)
+	field, binned_field, bin_centers, npart = _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask, is_dmo)
 	
 	if ax is None:
 		return binned_field, bin_centers, npart
@@ -307,13 +307,18 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 	return binned_field, bin_centers, npart
 
 
-def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask):
+def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask, is_dmo):
 
 	if field_type == 'cdm':
 		# First mask out al particles outside region of interest
 		ptype = 1 # For DM
 		these_pos = particle_pos[ptype][mask[ptype]]
 		mass = particle_data[ptype]['MASS'][mask[ptype]]*Gadget.units.mass
+		
+		if is_dmo is True:
+			ptype = 2 # For DM
+			these_pos = np.append(these_pos, particle_pos[ptype][mask[ptype]])
+			mass = np.append(mass, particle_data[ptype]['MASS'][mask[ptype]]*Gadget.units.mass)
 
 		bin_centers, bins_shell, part_per_bin = _build_hist_bins(these_pos, bins)
 		particle_volume = bins_shell[np.digitize(these_pos, bins)-1]*Gadget.units.length**3
