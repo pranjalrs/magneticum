@@ -15,6 +15,7 @@ from colossus.lss import peaks
 import g3read
 
 from dawn.sim_toolkit import tools
+from dawn.gadget import Gadget
 import dawn.utils as utils
 
 
@@ -43,6 +44,7 @@ field = args.field.strip('"').split(',')
 file_start, file_stop = args.file_start, args.file_stop
 nhalo, binning = args.nhalo, args.binning
 
+is_dmo = True if 'dm' in sim else False
 bin_limits = {}
 bin_limits['m500c'] = (args.mmin, args.mmax)
 bin_limits['mvir'] = (args.mmin, args.mmax)
@@ -51,8 +53,8 @@ bin_limits['nu_m500c'] = (args.nu_min, args.nu_max)
 low_bin, high_bin = bin_limits[binning][0], bin_limits[binning][1]
 
 ## Define internal units for GADGET, see:  https://wwwmpa.mpa-garching.mpg.de/~kdolag/GadgetHowTo/right.html#Format2
-length_unit = 1*u.kpc 
-mass_unit = 1e10*u.Msun
+length_unit = Gadget.units.length
+mass_unit = Gadget.units.mass
 temp_unit = 1*u.K
 
 field_dict = {'Pe': {'name': 'Electron Pressure', 'unit': 'keV/cm^3'},
@@ -129,9 +131,9 @@ with tqdm(total=nhalo) as pbar:
 		this_m500c = halo_m500c[i]
 		this_nu_m500c = halo_nu_m500c[i]
 		this_r500c = halo_r500c[i]
-		
+
 		filename = f'../../magneticum-data/data/test/{box}_cent/figures/halo_proj_id_{i}'
-		this_profile_data = tools.get_profile_for_halo(snap_base, this_pos, this_rvir, fields=field, recal_cent=True, save_proj=False, filename=filename)
+		this_profile_data = tools.get_profile_for_halo(snap_base, this_pos, this_rvir, fields=field, recal_cent=True, save_proj=False, filename=filename, is_dmo=is_dmo)
 		
 		this_halo_data = np.array(tuple([this_mvir.value, this_rvir, this_m500c.value, this_r500c, this_pos, this_profile_data]), dtype=dtype)
 
@@ -157,7 +159,7 @@ if args.isSave is True:
 		joblib.dump(data, f'../../magneticum-data/data/profiles/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1f}_{high_bin:.1f}.pkl')
 
 	elif binning == 'mvir':
-		joblib.dump(data, f'../../magneticum-data/data/profiles/{box}/{"_".join(field)}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}_nhalo{nhalo}.pkl')
+		joblib.dump(data, f'../../magneticum-data/data/profiles/{box}/{sim}_{"_".join(field)}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}_nhalo{nhalo}.pkl')
 
 
 #	joblib.dump(data, f'../magneticum-data/data/{field}_profile_{estimator}/{sim}/{field}_z={z:.2f}_Mmin_{m_min:.1E}_Mmax_{m_max:.1E}.pkl')
