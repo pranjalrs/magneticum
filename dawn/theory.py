@@ -5,9 +5,8 @@ from scipy.special import sici
 import camb
 import pyhalomodel
 
-import utils
-from mass_concentration import get_mass_concentration_relation
-import ipdb
+import dawn.utils as utils
+from dawn.mass_concentration import get_mass_concentration_relation
 
 def get_CLASS_Pk(k_sim, input_dict=None, binned=False, z=0.0):
 	'''Returns Pk for WMAP7 cosmology, optionally a dictionary of cosmo
@@ -86,6 +85,7 @@ def build_CAMB_cosmology(input_cosmo={}, zs=[0.]):
 		results: The results object obtained from running CAMB with the specified cosmological parameters.
 	'''
 	# default cosmology is WMAP7
+	halofit_version = input_cosmo.get('halofit_version', 'takahashi')
 	Omega_b = input_cosmo.get('Ob0', 0.0456)
 	Omega_c = input_cosmo.get('Om0', 0.272) - Omega_b
 	Omega_k = 0.0
@@ -94,7 +94,7 @@ def build_CAMB_cosmology(input_cosmo={}, zs=[0.]):
 	sigma_8 = input_cosmo.get('sigma8', 0.809)
 	w0 = -1.
 	wa = 0.
-	m_nu = 0.
+	m_nu = input_cosmo.get('mnu', 0.)
 	set_sigma8 = True
 	As = 2e-9
 
@@ -102,24 +102,35 @@ def build_CAMB_cosmology(input_cosmo={}, zs=[0.]):
 	kmax_CAMB = 200.
 
 	# Sets cosmological parameters in camb to calculate the linear power spectrum
+	# pass keys in input_cosmo that have 'HMCode' in them
+	# e.g. input_cosmo = {'H0': 70.4, 'Om0': 0.272, 'Ob0': 0.0456, 'sigma8': 0.809, 'HMCode_logT_AGN': 7}
+	# will set the AGN temperature to 10^7 K
+	kwargs = {}
+	for key in input_cosmo.keys():
+		if 'HMCode' in key:
+			kwargs[key] = input_cosmo[key]
+
+	non_linear_model = camb.nonlinear.Halofit(halofit_version=halofit_version)
+	non_linear_model.set_params(halofit_version=halofit_version, **kwargs)
+	print(non_linear_model)
 	pars = camb.CAMBparams(WantTransfer=True, WantCls=False, Want_CMB_lensing=False, 
-						DoLensing=False, NonLinearModel=camb.nonlinear.Halofit(halofit_version='mead2020'))
+						DoLensing=False, NonLinearModel=non_linear_model)
 	wb, wc = Omega_b*h**2, Omega_c*h**2
 
 	# This function sets standard and helium set using BBN consistency
-	pars.set_cosmology(ombh2=wb, omch2=wc, H0=100.*h, mnu=m_nu, omk=Omega_k)
+	pars.set_cosmology(ombh2=wb, omch2=wc, H0=100.*h, mnu=m_nu, omk=Omega_k,
+					num_massive_neutrinos=1, nnu=3.044,)
 	pars.set_dark_energy(w=w0, wa=wa, dark_energy_model='ppf')
 	pars.InitPower.set_params(As=As, ns=ns, r=0.)
 	pars.set_matter_power(redshifts=zs, kmax=kmax_CAMB) # Setup the linear matter power spectrum
-	Omega_m = pars.omegam # Extract the matter density
 
 	# Scale 'As' to be correct for the desired 'sigma_8' value if necessary
 	if set_sigma8:
 		results = camb.get_results(pars)
 		sigma_8_init = results.get_sigma8_0()
-		print('Running CAMB')
-		print('Initial sigma_8:', sigma_8_init)
-		print('Desired sigma_8:', sigma_8)
+		# print('Running CAMB')
+		# print('Initial sigma_8:', sigma_8_init)
+		# print('Desired sigma_8:', sigma_8)
 		scaling = (sigma_8/sigma_8_init)**2
 		As *= scaling
 		pars.InitPower.set_params(As=As, ns=ns, r=0.)
@@ -197,7 +208,7 @@ def get_pyHMCode_Pk(input_cosmo={}, z=[0.], fields=None, return_halo_terms=False
 		Pk_hm, Pk_hm_1halo, Pk_hm_2halo = pyhmcode.calculate_nonlinear_power_spectrum(c, hmod, fields, verbose=False, return_halo_terms=True)
 		return Pk_hm, Pk_hm_1halo, Pk_hm_2halo, ks
 
-def get_suppresion_hmcode(input_cosmo={}, zs=[0.], T_AGNs=None):
+def get_suppresion_hmcode(camb_cosmology=None, input_cosmo={}, zs=[0.], T_AGNs=None, k_array=None):
 	'''Matter power supression based on hmcode-the full Python
 	implementation of the Fortran HMCode.
 	'''
@@ -206,25 +217,34 @@ def get_suppresion_hmcode(input_cosmo={}, zs=[0.], T_AGNs=None):
 	zs = np.array(zs)
 
 	# Wavenumbers [h/Mpc]
-	kmin, kmax = 1e-3, 3e1
-	nk = 128
-	k = np.logspace(np.log10(kmin), np.log10(kmax), nk)
+	if k_array is None:
+		kmin, kmax = 1e-3, 3e1
+		nk = 128
+		k = np.logspace(np.log10(kmin), np.log10(kmax), nk)
+	
+	else:
+		k = k_array
 
 	# AGN-feedback temperature [K]
 	if T_AGNs is None:
 		T_AGNs = np.power(10, np.array([7.6, 7.8, 8.0, 8.3]))
 
 	# Redshifts
+	if camb_cosmology is None:
+		camb_results  = build_CAMB_cosmology(input_cosmo=input_cosmo, zs=zs)
 
-	camb_results  = build_CAMB_cosmology(input_cosmo=input_cosmo, zs=zs)
+	else:
+		camb_results = camb_cosmology
 
-	Pk_lin_interp = camb_results.get_matter_power_interpolator(nonlinear=False).P
-	Pk_nonlin_interp = camb_results.get_matter_power_interpolator(nonlinear=True).P
+	# Pk_lin_interp = camb_results.get_matter_power_interpolator(nonlinear=False).P
+	# Pk_nonlin_interp = camb_results.get_matter_power_interpolator(nonlinear=True).P
 
-	# Arrays for CAMB non-linear spectrum
-	Pk_CAMB = np.zeros((len(zs), len(k)))
-	for iz, z in enumerate(zs):
-		Pk_CAMB[iz, :] = Pk_nonlin_interp(z, k)
+	# # Arrays for CAMB non-linear spectrum
+	# Pk_CAMB = np.zeros((len(zs), len(k)))
+	# for iz, z in enumerate(zs):
+	# 	Pk_CAMB[iz, :] = Pk_nonlin_interp(z, k)
+
+	assert camb_results.Params.NonLinearModel.halofit_version == 'mead2020', 'Use Mead2020 halofit version'
 
 	Rk_feedback = []
 	for T_AGN in T_AGNs:
@@ -260,12 +280,18 @@ def get_halomodel_Pk(input_cosmo={}, z=0., settings={}):
 	hmod = setup['hmod']
 	camb_results = setup['camb_results']
 
+	# Get linear matter power spectrum from CAMB
+	Pk_lin_interpolator = camb_results.get_matter_power_interpolator(nonlinear=False)
+	Pk_linear = Pk_lin_interpolator.P(z, ks) # Single out the linear P(k) interpolator and evaluate linear power
+
+	pack = ks, Pk_linear, Ms, sigmaRs
 	marginalize_mc_scatter = settings.get('marginalize_mc_scatter', False)
 	use_KDE = settings.get('use_KDE', False)
 	print('Marginalize over c-M scatter:', marginalize_mc_scatter)
 
 	# Create NFW profile
 	Uk = win_NFW(ks, rvs, cs)
+	Uk_sq = win_NFW(ks, rvs, cs)
 
 	# Marginalize over c-M relation scatter
 	if marginalize_mc_scatter:
@@ -274,22 +300,27 @@ def get_halomodel_Pk(input_cosmo={}, z=0., settings={}):
 			if KDE is None:
 				raise ValueError('KDE must be provided if use_KDE is True') 
 			# Use KDE to marginalize over the concentration-mass relation scatter
-			Uk = win_NFW_marginalized(use_KDE=use_KDE, KDE=KDE, z=z, **setup)
+			Uk = win_NFW_marginalized(term='Uk', use_KDE=use_KDE, KDE=KDE, z=z, **setup) # <Uk>
+			Uk_sq = win_NFW_marginalized(term='Uk_sq', use_KDE=use_KDE, KDE=KDE, z=z, **setup) # <Uk^2>^1/2
 
 		else:
-			Uk = win_NFW_marginalized(z=z, **setup)
+			Uk = win_NFW_marginalized(term='Uk', z=z, **setup)
+			Uk_sq = win_NFW_marginalized(term='Uk_sq', z=z, **setup)
+
+		# Get 1-halo term
+		matter_profile = pyhalomodel.profile.Fourier(ks, Ms, Uk_sq, amplitude=Ms, normalisation=hmod.rhom, mass_tracer=True) 
+		_, Pk_1h, _ = hmod.power_spectrum(*pack, {'m': matter_profile})#, simple_twohalo=True)
+
+		# Get 2-halo term
+		matter_profile = pyhalomodel.profile.Fourier(ks, Ms, Uk, amplitude=Ms, normalisation=hmod.rhom, mass_tracer=True) 
+		Pk_2h, _, _ = hmod.power_spectrum(*pack, {'m': matter_profile})#, simple_twohalo=True)
+
+		Pk_hm = {'m-m': Pk_1h['m-m'] + Pk_2h['m-m']}
 
 	else:
 		Uk = win_NFW(ks, rvs, cs)
-
-	matter_profile = pyhalomodel.profile.Fourier(ks, Ms, Uk, amplitude=Ms, normalisation=hmod.rhom, mass_tracer=True) 
-
-	# Get linear matter power spectrum from CAMB
-	Pk_lin_interpolator = camb_results.get_matter_power_interpolator(nonlinear=False)
-	Pk_linear = Pk_lin_interpolator.P(z, ks) # Single out the linear P(k) interpolator and evaluate linear power
-
-	pack = ks, Pk_linear, Ms, sigmaRs
-	Pk_2h, Pk_1h, Pk_hm = hmod.power_spectrum(*pack, {'m': matter_profile})#, simple_twohalo=True)
+		matter_profile = pyhalomodel.profile.Fourier(ks, Ms, Uk, amplitude=Ms, normalisation=hmod.rhom, mass_tracer=True) 
+		Pk_2h, Pk_1h, Pk_hm = hmod.power_spectrum(*pack, {'m': matter_profile})#, simple_twohalo=True)
 
 	return Pk_hm, Pk_2h, Pk_1h, ks
 
@@ -358,20 +389,21 @@ def setup_halomodel(input_cosmo={}, z=0., settings={}):
 
 	return setup
 
-def win_NFW_marginalized(ks, cs, sigma_lnc, mc_relation, hmod, z, Ms=None, use_KDE=False, KDE=None, **_):
+def win_NFW_marginalized(term, ks, cs, sigma_lnc, mc_relation, hmod, z, Ms=None, use_KDE=False, KDE=None, **_):
 	'''
 	Calculates the marginalized window function for the NFW profile.
 
 	Parameters:
-	- ks (array-like): array of wavenumbers
-	- cs (array-like): array of concentrations
-	- sigma_lnc (float): scatter in the concentration-mass relation
-	- mc_relation (MassConcentrationRelation): MassConcentrationRelation class object
-	- hmod (object): pyhalomodel model object
-	- z (float): redshift
-	- Ms (array-like, optional): array of halo masses (default: None)
-	- use_KDE (bool, optional): flag to use Kernel Density Estimation (default: False)
-	- KDE (object, optional): Kernel Density Estimation object (default: None)
+	- term (str): Profile that enters the integral, either 'Uk' or 'Uk_sq'.
+	- ks (array-like): Array of wavenumbers.
+	- cs (array-like): Array of concentrations.
+	- sigma_lnc (float): Scatter in the concentration-mass relation.
+	- mc_relation (MassConcentrationRelation): MassConcentrationRelation class object.
+	- hmod (object): pyhalomodel model object.
+	- z (float): Redshift.
+	- Ms (array-like, optional): Array of halo masses (default: None).
+	- use_KDE (bool, optional): Flag to use Kernel Density Estimation (default: False).
+	- KDE (object, optional): Kernel Density Estimation object (default: None).
 
 	Returns:
 	- Uk (array-like): The marginalized window function array with shape (k, cs.size).
@@ -399,11 +431,15 @@ def win_NFW_marginalized(ks, cs, sigma_lnc, mc_relation, hmod, z, Ms=None, use_K
 			# Compute the lognormal distribution
 			ln_c_pdf = utils.lognormal_pdf(concentration_grid, np.log(this_cbar), sigma_lnc)
 
-		integrand = Uk_grid**2 * ln_c_pdf
-
-		# Need to flip so that the grid is in increasing order
-		# Otherwise integration is negative
-		Uk[:, i] = np.trapz(np.flip(integrand, axis=1), np.flip(concentration_grid, axis=1), axis=1)**0.5
+		if term == 'Uk':
+			integrand = Uk_grid * ln_c_pdf
+			# Need to flip so that the grid is in increasing order
+			# Otherwise integration is negative
+			Uk[:, i] = np.trapz(np.flip(integrand, axis=1), np.flip(concentration_grid, axis=1), axis=1)
+		
+		elif term == 'Uk_sq':
+			integrand = Uk_grid**2 * ln_c_pdf
+			Uk[:, i] = np.trapz(np.flip(integrand, axis=1), np.flip(concentration_grid, axis=1), axis=1)**0.5
 
 	return Uk
 
