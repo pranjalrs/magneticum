@@ -29,7 +29,7 @@ def get_mean_mass_per_particle(Y):
 	-------
 	float
 		Mean mass per particle
-	"""	
+	"""
 
 	return 1/(2*(1-Y) + 3/4*Y)
 
@@ -118,7 +118,7 @@ def get_physical_electron_pressure(rho, Temp, Y, z, little_h):
 	float
 		Physical electron pressure (in keV/cm^3)
 	"""
-	 
+
 	comoving_Pe = get_comoving_electron_pressure(rho, Temp, Y)
 	physical_Pe = comoving_Pe * Gadget.convert.pressure_to_physical(z, little_h)
 
@@ -149,7 +149,7 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 
 	Returns
 	-------
-	list, list	
+	list, list
 		Field value in each radial bin, radian bin
 	"""
 	if not isinstance(fields, list): fields = [fields]
@@ -169,21 +169,21 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 	except FileNotFoundError:
 		print(f'Snapshot directory {snap_base} not found!')
 		sys.exit(1)
-	
+
 	# DMO particles don't have 'POT ' block so cannot recenter
 	if is_dmo is False:
 		# We want to recenter but remember the method returns a superset of particles
-		# So we need to mask particles before finding potential minimum, otherwise we can end up in 
-		# a nearby halo	
+		# So we need to mask particles before finding potential minimum, otherwise we can end up in
+		# a nearby halo
 		distance = g3read.to_spherical(particle_data[1]['POS '], halo_center).T[0]
-		## Create mask for particle outside rmax	
+		## Create mask for particle outside rmax
 		mask = distance < halo_radius
-		## Check if the particle at potential min. is close to halo center	
+		## Check if the particle at potential min. is close to halo center
 		pot_min_idx = np.argmin(particle_data[1]['POT '][mask])
 		GPOS = particle_data[1]['POS '][mask][pot_min_idx]
 
 		if not np.all(np.isclose(halo_center, GPOS, atol=1.5)):
-			print('Warning: Halo might be mis-centerd') 
+			print('Warning: Halo might be mis-centerd')
 			print('Delta X={:.2f}, Delta Y={:.2f}, Delta Z={:.2f} kpc/h'.format(*(halo_center-GPOS)))
 			print('Recentering...')
 			if recal_cent is True:
@@ -227,25 +227,25 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 			distance = g3read.to_spherical(particle_data[this_ptype]['POS '], halo_center).T[0]
 			particle_pos[this_ptype] = distance
 
-			## Create mask for particle outside rmax	
+			## Create mask for particle outside rmax
 			mask[this_ptype] = distance < rmax
 
 	# To assign e.g, pressure to each particle we also need its the volume of the shell it is in
 	# This is only required for make 2D maps
 	field, binned_field, bin_centers, npart = _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask, is_dmo)
-	
+
 	if ax is None:
 		return binned_field, bin_centers, npart
-	
+
 	## Hack: need to fix later
 	if field_type == 'cdm':
 		this_ptype = 1
-		label = 'DM Density'	
+		label = 'DM Density'
 
 	elif field_type in ['Pe_Mead', 'gas', 'Temp_mass', 'Temp_mean', 'Temp_median']:
 		this_ptype = 0
-		label = 'Electron Pressure'	
-	
+		label = 'Electron Pressure'
+
 #	x = particle_data[this_ptype]['POS '][:, 0][mask[this_ptype]]/1e3 - halo_center[0]/1e3
 #	y = particle_data[this_ptype]['POS '][:, 1][mask[this_ptype]]/1e3 - halo_center[1]/1e3
 #	z = particle_data[this_ptype]['POS '][:, 2][mask[this_ptype]]/1e3 - halo_center[2]/1e3
@@ -254,7 +254,7 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 	x = particle_data[this_ptype]['POS '][:, 0]/1e3 #- halo_center[0]/1e3
 	y = particle_data[this_ptype]['POS '][:, 1]/1e3 #- halo_center[1]/1e3
 	z = particle_data[this_ptype]['POS '][:, 2]/1e3 #- halo_center[2]/1e3
-	
+
 	field = np.ones_like(x)
 	## x-y projection
 	ax[0].hist2d(x, y, weights=field, bins=100,  norm = colors.LogNorm(), rasterized=True)
@@ -268,7 +268,7 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 	## y-z projection
 	im = ax[2].hist2d(y, z, weights=field, bins=100,  norm = colors.LogNorm(), rasterized=True)
 	ax[2].set(xlabel='$\\Delta$Y [cMpc/h]', ylabel='$\\Delta$Z [cMpc/h]')
-	utils.colorbar(im[3], ax=ax[2])	
+	utils.colorbar(im[3], ax=ax[2])
 
 	ax[0].scatter(halo_center[0]/1e3, halo_center[1]/1e3, marker='x', c='orangered')
 	ax[1].scatter(halo_center[0]/1e3, halo_center[2]/1e3, marker='x', c='orangered')
@@ -285,10 +285,10 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 
 	circle = plt.Circle((halo_center[0]/1e3, halo_center[1]/1e3), halo_radius/1e3, ls='--', color='orangered', fill=False)
 	ax[0].add_patch(circle)
-	
+
 	circle = plt.Circle((halo_center[0]/1e3, halo_center[2]/1e3), halo_radius/1e3, ls='--', color='orangered', fill=False)
 	ax[1].add_patch(circle)
-	
+
 	circle = plt.Circle((halo_center[1]/1e3, halo_center[2]/1e3), halo_radius/1e3, ls='--', color='orangered', fill=False)
 	ax[2].add_patch(circle)
 
@@ -303,7 +303,7 @@ def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, f
 #		ax[i].set_xlim(-2*rmax/1e3, 2*rmax/1e3)
 #		ax[i].set_ylim(-2*rmax/1e3, 2*rmax/1e3)
 #		ax[i].set_aspect('equal')
-	
+
 	return binned_field, bin_centers, npart
 
 
@@ -314,7 +314,7 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask, is_
 		ptype = 1 # For DM
 		these_pos = particle_pos[ptype][mask[ptype]]
 		mass = particle_data[ptype]['MASS'][mask[ptype]]*Gadget.units.mass
-		
+
 		if is_dmo is True:
 			ptype = 2 # For DM
 			these_pos = particle_pos[ptype][mask[ptype]]
@@ -330,7 +330,7 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask, is_
 		return density, binned_density*density.unit, bin_centers, part_per_bin
 
 
-	if field_type == 'gas':
+	elif field_type == 'gas':
 		ptype = 0 # For gas
 		these_pos = particle_pos[ptype][mask[ptype]]
 		mass = particle_data[ptype]['MASS'][mask[ptype]]*Gadget.units.mass
@@ -345,7 +345,7 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask, is_
 		return density, binned_density*density.unit, bin_centers, part_per_bin
 
 
-	if field_type == 'Pe_Mead':
+	elif field_type == 'Pe_Mead':
 		ptype = 0  # For gas
 		these_pos = particle_pos[ptype][mask[ptype]]
 		mass = particle_data[ptype]['MASS'][mask[ptype]]
@@ -360,7 +360,7 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask, is_
 
 		return Pe.value, binned_Pe*Pe.unit, bin_centers, part_per_bin
 
-	if field_type == 'Temp_mass':
+	elif field_type == 'Temp_mass':
 		ptype = 0  # For gas
 		these_pos = particle_pos[ptype][mask[ptype]]
 		mass = particle_data[ptype]['MASS'][mask[ptype]]
@@ -374,7 +374,7 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask, is_
 
 		return Temp, binned_Temp/binned_mass*Temp.unit, bin_centers, part_per_bin
 
-	if field_type == 'Temp_mean':
+	elif field_type == 'Temp_mean':
 		ptype = 0  # For gas
 		these_pos = particle_pos[ptype][mask[ptype]]
 		mass = particle_data[ptype]['MASS'][mask[ptype]]
@@ -386,7 +386,7 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask, is_
 
 		return Temp, binned_Temp*Temp.unit, bin_centers, part_per_bin
 
-	if field_type == 'Temp_median':
+	elif field_type == 'Temp_median':
 		ptype = 0  # For gas
 		these_pos = particle_pos[ptype][mask[ptype]]
 		mass = particle_data[ptype]['MASS'][mask[ptype]]
@@ -399,10 +399,23 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask, is_
 		return Temp, binned_Temp*Temp.unit, bin_centers, part_per_bin
 
 
+	elif field_type == 'star':
+		ptype = 4 # For star particles
+		these_pos = particle_pos[ptype][mask[ptype]]
+		mass = particle_data[ptype]['MASS'][mask[ptype]]*Gadget.units.mass
+
+		bin_centers, bins_shell, part_per_bin = _build_hist_bins(these_pos, bins)
+		particle_volume = bins_shell[np.digitize(these_pos, bins)-1]*Gadget.units.length**3
+
+		# Now compute `field`
+		density = mass/particle_volume  # Per particle and in code units
+		binned_density = scipy.stats.binned_statistic(these_pos, values=density, bins=bins, statistic='sum')[0]
+
+		return density, binned_density*density.unit, bin_centers, part_per_bin
 
 def _build_hist_bins(pos, bins):
 	"""
-	Build histogram for a given set of particle positions and bins. 
+	Build histogram for a given set of particle positions and bins.
 
 	Parameters:
 	pos (array-like): Array of particle positions.
@@ -416,8 +429,8 @@ def _build_hist_bins(pos, bins):
 	part_per_bin = np.histogram(pos, bins=bins, density=False)[0]
 	bin_pos_sum = np.histogram(pos, weights=pos, bins=bins, density=False)[0]
 	bin_centers = bin_pos_sum/part_per_bin  # Average bin center weighted by number of particles
-	bins_shell = 4./3.*np.pi*(bins[1:]**3 - bins[:-1]**3) 
-	
+	bins_shell = 4./3.*np.pi*(bins[1:]**3 - bins[:-1]**3)
+
 
 	return bin_centers, bins_shell, part_per_bin
 
@@ -427,7 +440,7 @@ def get_halo_catalog(group_base, blocks=['GPOS', 'MVIR', 'RVIR', 'M5CC', 'R5CC']
 	redshift_id = group_base.split('/')[-1].split('_')[-1]
 
 	file_paths = glob.glob(f'{group_base}/sub_{redshift_id}.*')
-	
+
 	print(f'Saving only halos with Mvir>{mmin:.1E} Msun/h')
 	data = {key:[] for key in blocks}
 	with tqdm(total=len(file_paths)) as pbar:
@@ -448,7 +461,7 @@ def get_hmf_from_halo_catalog(halo_catalog=None, mass=None, mr=1.3e10, return_dn
 	Compute HMF from halo catalog for a given snapshot
 	To Do: Add details to docstring
 	'''
-	if halo_catalog is not None:    
+	if halo_catalog is not None:
 		halo_mass = (halo_catalog['MVIR']*Gadget.units.mass).value
 
 	else:
