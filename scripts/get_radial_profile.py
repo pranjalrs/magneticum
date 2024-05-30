@@ -7,7 +7,7 @@ import astropy.units as u
 import astropy.constants as constants
 import joblib
 import numpy as np
-import os 
+import os
 from tqdm import tqdm
 
 from colossus.cosmology import cosmology
@@ -16,6 +16,7 @@ import g3read
 
 from dawn.sim_toolkit import tools
 from dawn.gadget import Gadget
+import multiprocessing
 import dawn.utils as utils
 
 
@@ -122,25 +123,28 @@ halo_rvir = halo_rvir[inds]
 halo_r500c = halo_r500c[inds]
 
 
-with tqdm(total=nhalo) as pbar:
-	# For each halo calculate pressure profile
-	for i in range(len(halo_positions)):
-		this_pos = halo_positions[i]
-		this_mvir = halo_mvir[i]
-		this_rvir = halo_rvir[i]
-		this_m500c = halo_m500c[i]
-		this_nu_m500c = halo_nu_m500c[i]
-		this_r500c = halo_r500c[i]
+def calculate_profile(i):
+	this_pos = halo_positions[i]
+	this_mvir = halo_mvir[i]
+	this_rvir = halo_rvir[i]
+	this_m500c = halo_m500c[i]
+	this_nu_m500c = halo_nu_m500c[i]
+	this_r500c = halo_r500c[i]
 
-		filename = f'../../magneticum-data/data/test/{box}_cent/figures/halo_proj_id_{i}'
-		this_profile_data = tools.get_profile_for_halo(snap_base, this_pos, this_rvir, fields=field, recal_cent=True, save_proj=False, filename=filename, is_dmo=is_dmo)
-		
-		this_halo_data = np.array(tuple([this_mvir.value, this_rvir, this_m500c.value, this_r500c, this_pos, this_profile_data]), dtype=dtype)
+	filename = f'../../magneticum-data/data/test/{box}_cent/figures/halo_proj_id_{i}'
+	this_profile_data = tools.get_profile_for_halo(snap_base, this_pos, this_rvir, fields=field, recal_cent=True, save_proj=False, filename=filename, is_dmo=is_dmo)
 
-		data = np.append(data, this_halo_data)
+	this_halo_data = np.array(tuple([this_mvir.value, this_rvir, this_m500c.value, this_r500c, this_pos, this_profile_data]), dtype=dtype)
 
-		pbar.update(1)
+	return this_halo_data
 
+pool = multiprocessing.Pool()
+results = pool.map(calculate_profile, range(len(halo_positions)))
+pool.close()
+pool.join()
+
+for result in results:
+	data = np.append(data, result)
 
 data = np.delete(data, (0), axis=0)
 
@@ -152,7 +156,7 @@ if args.isSave is True:
 		np.save(f'../../magneticum-data/data/test/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}_nhalo{nhalo}.npy', data)
 		joblib.dump(data, f'../../magneticum-data/data/test/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}_nhalo{nhalo}.pkl')
 
-	elif binning == 'm500c':	
+	elif binning == 'm500c':
 		joblib.dump(data, f'../../magneticum-data/data/profiles/{box}/{field}_z={z:.2f}_{binning}_{low_bin:.1E}_{high_bin:.1E}.pkl')
 
 	elif binning == 'nu_m500c':
