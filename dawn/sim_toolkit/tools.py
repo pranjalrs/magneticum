@@ -317,8 +317,8 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask, is_
 		
 		if is_dmo is True:
 			ptype = 2 # For DM
-			these_pos = np.append(these_pos, particle_pos[ptype][mask[ptype]])
-			mass = np.append(mass, particle_data[ptype]['MASS'][mask[ptype]]*Gadget.units.mass)
+			these_pos = particle_pos[ptype][mask[ptype]]
+			mass = particle_data[ptype]['MASS'][mask[ptype]]*Gadget.units.mass
 
 		bin_centers, bins_shell, part_per_bin = _build_hist_bins(these_pos, bins)
 		particle_volume = bins_shell[np.digitize(these_pos, bins)-1]*Gadget.units.length**3
