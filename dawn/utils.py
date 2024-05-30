@@ -6,7 +6,7 @@ import os
 import re
 import scipy.stats
 
-def build_KDE(mass, concentration, weights=None, bw_method='silverman'):
+def build_KDE(mass, concentration, mmin, mmax=3.2e15, weights=None, bw_method='silverman'):
 	'''
 	Builds a kernel density estimator (KDE) for the given data.
 
@@ -18,14 +18,16 @@ def build_KDE(mass, concentration, weights=None, bw_method='silverman'):
 	- KDE (object): The KDE object.
 	'''
 	mass_bins = np.logspace(11, 16, 11)
+	# Select bins with m>Mmin
+	mass_bins = mass_bins[(mass_bins>=mmin) & (mass_bins<=mmax)]
 
 	kde_models = {}
-	for i in range(9):
+	for i in range(len(mass_bins)-1):
 		mmin, mmax = mass_bins[i], mass_bins[i+1]
 		mask = (mass>mmin) & (mass<=mmax)
 		x = concentration[mask]
 		if len(x)==0:
-			kde_models.append(None)
+			kde_models[f'{np.log10(mmin)}<logM<{np.log10(mmax)}'] = None
 			continue
 
 		scipy_kde = scipy.stats.gaussian_kde(x, bw_method=bw_method, weights=weights[mask] if weights is not None else None)
@@ -81,7 +83,7 @@ def get_cosmology_dict_from_path(path):
 
 def _assert_correct_field(fields):
 	for f in fields:
-		assert f in  ['Pe', 'Temp_mean', 'Temp_median', 'Temp_mass', 'matter', 'cdm', 'gas', 'Pe_Mead', 'v_disp'], f'Field *{f}* is unknown!'
+		assert f in  ['Pe', 'Temp_mean', 'Temp_median', 'Temp_mass', 'matter', 'cdm', 'gas', 'Pe_Mead', 'v_disp', 'star'], f'Field *{f}* is unknown!'
 
 
 def set_storage_path():
@@ -113,7 +115,7 @@ def search_mass_range_in_string(string):
 
 	if match:
 		return float(match.group(1)), float(match.group(2))
-	
+
 	else:
 		print(f'No mass range found in {string}')
 		return None, None
@@ -147,7 +149,7 @@ def get_h(filename):
 def get_fb(filename):
 	omega_b = get_omega_b(filename)
 	omega_m = get_omega_m(filename)
-	
+
 	return omega_b/omega_m
 
 def sigma_percentile(arr):
