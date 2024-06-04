@@ -70,6 +70,6 @@ class PowerSpectrumHandler:
 		try:
 			return np.loadtxt(path, **kwargs)
 		except FileNotFoundError:
-			print('File not found {path}')
+			print(f'File not found {path}')
 			return None, None
 
