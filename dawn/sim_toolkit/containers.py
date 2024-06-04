@@ -1,3 +1,5 @@
+import numpy as np
+
 class ProfileContainer():
     """
     A class representing a container for profile data.
@@ -21,3 +23,11 @@ class ProfileContainer():
         self.sigma_prof = sigma_prof
         self.sigma_lnprof = sigma_lnprof
         self.units = units
+    
+    @property
+    def mean_profile_rescale(self):
+        return np.nanmean(self.profile_rescale, axis=0)
+    
+    @property
+    def median_profile_rescale(self):
+        return np.nanmedian(self.profile_rescale, axis=0)
