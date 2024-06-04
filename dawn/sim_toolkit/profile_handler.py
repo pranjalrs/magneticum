@@ -90,9 +90,9 @@ class HaloProfileHandler():
 		For rho_dm, Pe, rho the uncertainty is calculated as sigma = mu/Npart**0.5=profile/Npart**0.5
 		the uncertainty in log profile is calculated as sigma_lnprof = sigma/mu= sigma/profile
 		Parameters:
-			halo (dict): Dictionary containing halo data.
-			field (str): Field name.
-			return_sigma (bool, optional): Whether to return sigma values. Default is False.
+		- halo (dict): Dictionary containing halo data.
+		- field (str): Field name.
+		- return_sigma (bool, optional): Whether to return sigma values. Default is False.
 
 		Returns:
 			tuple: Tuple containing profile, r, profile_rescale, sigma_prof, and sigma_lnprof (if return_sigma is True),
@@ -133,9 +133,8 @@ class HaloProfileHandler():
 			sigma_lnprof = sigma_prof/profile
 
 		#Rescale prof to get intr. scatter
-		# rescale_value = nan_interp(r, profile)(1)
-		# profile_rescale = (profile/ rescale_value)
-		profile_rescale = [0.]*len(r)
+		profile_rescale = (profile/ profile[-1])
+		# profile_rescale = [0.]*len(r)
 
 		if return_sigma:
 			return profile, r, profile_rescale, sigma_prof, sigma_lnprof
@@ -172,3 +171,25 @@ class HaloProfileHandler():
 						'sigma_lnprof': sigma_lnprof*r_mask}
 
 		return ProfileContainer(**profile_args)
+	
+	@classmethod
+	def get_scatter(cls, x, xbar):
+		"""
+		Calculate the scatter in each radial bin (cloumn) in the input array `x` with respect to the corresponding element in `xbar`.
+
+		Parameters:
+		- x (ndarray): Input array of shape (n, m) where n is the number of rows and m is the number of columns.
+		- xbar (ndarray): Array of shape (m,) containing the reference values for each column.
+
+		Returns:
+		- ndarray: Array of shape (m,) containing the scatter of each column.
+
+		"""
+		std = []
+		for i in range(x.shape[1]):
+			this_column = x[:, i]
+			idx = (this_column > 0.) & (np.isfinite(this_column))
+			this_column = this_column[idx]
+			std.append(np.nanmean((this_column - xbar[i]) ** 2) ** 0.5)
+
+		return np.array(std)
