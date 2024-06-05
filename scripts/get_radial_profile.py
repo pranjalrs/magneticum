@@ -78,7 +78,7 @@ dtype = np.dtype({'names': ['Halo mass: Rvir (Msun/h)', 'Rvir (ckpc/h)', 'Halo m
 
 print(f'Computing profile for field {field}\n')
 print(f'Using simulation {box}/{sim} at z={z:.2f}\n')
-print(f'Binning in {binning} with min. = {low_bin} and max. = {high_bin}\n')
+print(f'Binning in {binning} with min. = {np.log10(low_bin):.1f} and max. = {np.log10(high_bin):.1f}\n')
 
 data = np.array(1, dtype=dtype)
 
@@ -139,7 +139,9 @@ def calculate_profile(i):
 	return this_halo_data
 
 pool = multiprocessing.Pool()
-results = pool.map(calculate_profile, range(len(halo_positions)))
+print(f'Number of processes: {pool._processes}')
+
+results = list(tqdm(pool.imap(calculate_profile, range(len(halo_positions)), chunksize=10)))
 pool.close()
 pool.join()
 
