@@ -155,9 +155,9 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 	if not isinstance(fields, list): fields = [fields]
 	utils._assert_correct_field(fields)
 
-	ptype = [0, 1, 2]
-	if 'matter' in fields:
-		ptype += [4]
+	ptype = [0, 1, 2, 4, 5]
+#	if 'matter' in fields:
+#		ptype += [4, 5]
 
 	try:
 		if is_dmo is True:
