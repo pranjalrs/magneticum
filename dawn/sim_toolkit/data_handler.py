@@ -73,6 +73,7 @@ class DataHandler:
 		- sim_name (str): The name of the simulation.
 		'''
 		cosmo = utils.get_cosmology_dict_from_path(sim_name)
+		self.cosmo_dict = cosmo
 		self.omega_m = cosmo['Om0']
 		self.omega_b = cosmo['Ob0']
 		self.sigma8 = cosmo['sigma8']
