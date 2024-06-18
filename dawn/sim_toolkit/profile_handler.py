@@ -98,39 +98,59 @@ class HaloProfileHandler():
 			tuple: Tuple containing profile, r, profile_rescale, sigma_prof, and sigma_lnprof (if return_sigma is True),
 				or profile, r, and profile_rescale (if return_sigma is False).
 		'''
-		if field=='rho_dm':
+		if field == 'rho_dm':
 			r = halo['fields']['cdm'][1]/halo['rvir']
 			profile = halo['fields']['cdm'][0]
 			npart = halo['fields']['cdm'][2]
 			sigma_prof = profile/npart**0.5
 			sigma_lnprof = sigma_prof/profile
 
-		elif field=='Pe':
+		elif field == 'Pe':
 			r = halo['fields']['Pe_Mead'][1]/halo['rvir']
 			profile = halo['fields']['Pe_Mead'][0]
 			npart = halo['fields']['Pe_Mead'][2]
 			sigma_prof = profile/npart**0.5
 			sigma_lnprof = sigma_prof/profile
 
-		elif field=='gas':
+		elif field == 'gas':
 			r = halo['fields']['gas'][1]/halo['rvir']
 			profile = halo['fields']['gas'][0]
 			npart = halo['fields']['gas'][2]
 			sigma_prof = profile/npart**0.5
 			sigma_lnprof = sigma_prof/profile
 
-		elif field=='v_disp':
+		elif field == 'v_disp':
 			raise NotImplementedError
 	#         r = halo['fields']['v_disp'][1]/halo['rvir']
 	#         profile = halo['fields']['v_disp'][0]
 	#         sigma_lnprof = halo['fields']['v_disp'][3]
 
-		else:
-			r = halo['fields'][field][1]/halo['rvir']
-			profile = halo['fields'][field][0]
-			npart = halo['fields'][field][2]
+		elif field == 'matter':
+			# We need to retrieve dm and gas profiles and sum them
+			r_dm = halo['fields']['cdm'][1]/halo['rvir']
+			profile_dm = halo['fields']['cdm'][0]
+			npart_dm = halo['fields']['cdm'][2]
+
+			r_gas = halo['fields']['gas'][1]/halo['rvir']
+			profile_gas = halo['fields']['gas'][0]
+			npart_gas = halo['fields']['gas'][2]
+
+			profile = profile_dm + profile_gas
+			r = (r_dm*profile_dm + r_gas*profile_gas)/profile
+			npart = npart_dm + npart_gas
 			sigma_prof = profile/npart**0.5
 			sigma_lnprof = sigma_prof/profile
+
+		else:
+			try:
+				r = halo['fields'][field][1]/halo['rvir']
+				profile = halo['fields'][field][0]
+				npart = halo['fields'][field][2]
+				sigma_prof = profile/npart**0.5
+				sigma_lnprof = sigma_prof/profile
+
+			except KeyError:
+				raise KeyError(f"Field {field} not found in halo data.")
 
 		#Rescale prof to get intr. scatter
 		profile_rescale = (profile/ profile[-1])
@@ -141,7 +161,7 @@ class HaloProfileHandler():
 
 		else:
 			return profile, r, profile_rescale
-	
+
 	def get_masked_profile(self, mmin, mmax, rmin, field):
 		profile_container = getattr(self, field)
 
@@ -161,7 +181,7 @@ class HaloProfileHandler():
 		rmin = rmin / rvir
 		rmax = 1. # in r/Rvir
 		r_mask = (r >= rmin[:, np.newaxis]) & (r <= rmax)
-	
+
 		profile_args = {'mvir': mvir, 'rvir': rvir,
 				  		'profile': profile*r_mask,
 						# 'units': profile_container.units,
@@ -171,7 +191,7 @@ class HaloProfileHandler():
 						'sigma_lnprof': sigma_lnprof*r_mask}
 
 		return ProfileContainer(**profile_args)
-	
+
 	@classmethod
 	def get_scatter(cls, x, xbar):
 		"""
