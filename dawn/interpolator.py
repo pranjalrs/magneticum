@@ -64,12 +64,18 @@ class ProfileInterpolator():
 			if isinstance(halo_mass, float):
 				halo_mass = np.array([halo_mass])
 
+			shape = [0, 0]
+			shape[0] = len(halo_mass)
+
 			if rbins.ndim == 1:
 				expanded_rbins = list(rbins) * len(halo_mass)
+				shape[1] = len(rbins)
+
 			else:
+				shape[1] = rbins.shape[1]
 				expanded_rbins = np.concatenate(rbins)
 
-			expanded_halo_mass = np.repeat(halo_mass, len(rbins)).T
+			expanded_halo_mass = np.concatenate(np.repeat([halo_mass], shape[1], axis=0).T)
 
 			interp_profiles = self.interpolator(expanded_halo_mass, expanded_rbins)
 
@@ -78,7 +84,7 @@ class ProfileInterpolator():
 			else:
 				interp_profiles = interp_profiles.reshape(np.array(rbins).shape)
 
-			if np.isnan(interp_profiles).any():
-				raise ValueError('Interpolated profiles contain NaNs. Halo mass/rbins might be out of interpolation range.')
+			# if np.isnan(interp_profiles).any():
+				# raise ValueError('Interpolated profiles contain NaNs. Halo mass/rbins might be out of interpolation range.')
 
 			return interp_profiles
