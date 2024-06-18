@@ -112,8 +112,9 @@ class Likelihood:
 			data = self.profile_dict[field].profile
 			sigma_prof = self.profile_dict[field].sigma_prof
 			sigma_lnprof = self.profile_dict[field].sigma_lnprof
+			sigma_intr = self.profile_dict[field].sigma_intr
 
-			chi2[field] = self.eval_chi2(data, model_prediction[field].value, sigma_prof, sigma_lnprof)
+			chi2[field] = self.eval_chi2(data, model_prediction[field].value, sigma_prof, sigma_lnprof, sigma_intr)
 
 		if self.return_blobs:
 			return -0.5 * np.sum(list(chi2.values())), -0.5 * chi2['rho_dm'], -0.5 * chi2['rho_gas'], -0.5 * chi2['Temp'], -0.5 * chi2['Pe']
@@ -148,8 +149,9 @@ class Likelihood:
 															return_Temp=self._model_args_return_Temp)
 				model_prediction[field] = profs[field]
 
+		return model_prediction
 
-	def eval_chi2(self, data, model, sigma=None, lnsigma=None):
+	def eval_chi2(self, data, model, sigma=None, lnsigma=None, sigma_intr=0.):
 		'''
 		Calculates the chi-squared value for the given data and model.
 
@@ -164,10 +166,11 @@ class Likelihood:
 		'''
 		if self.chi2_type == 'log':
 			num = np.log(data / model)
-			denom = sigma
+			denom = (lnsigma**2 + sigma_intr**2)**0.5
+
 		elif self.chi2_type == 'linear':
 			num = (data - model)
-			denom = lnsigma
+			denom = (sigma**2 + sigma_intr**2)**0.5
 
 		idx = data == 0
 
@@ -175,6 +178,7 @@ class Likelihood:
 
 		if not np.all(np.isfinite(residual)):
 			return np.inf
+
 		else:
 			return np.sum(residual**2)
 
