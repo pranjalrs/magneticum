@@ -11,7 +11,7 @@ from tqdm import tqdm
 import astropy.cosmology.units as cu
 import astropy.units as u
 import astropy.constants as constants
-import g3read
+# import g3read
 
 from dawn.gadget import Gadget
 import dawn.utils as utils
@@ -456,35 +456,76 @@ def get_halo_catalog(group_base, blocks=['GPOS', 'MVIR', 'RVIR', 'M5CC', 'R5CC']
 	joblib.dump(data, f'../../magneticum-data/data/halo_catalog/{box_name}/{sim_name}_sub_{redshift_id}.pkl', compress='lzma')
 
 
-def get_hmf_from_halo_catalog(halo_catalog=None, mass=None, mr=1.3e10, return_dndlog10m=False, boxsize=None):
-	'''
-	Compute HMF from halo catalog for a given snapshot
-	To Do: Add details to docstring
-	'''
+def get_hmf_from_halo_catalog(halo_catalog=None, mass=None, mr=1.3e10, hmf='counts', boxsize=None):
+	"""
+	Calculate the halo mass function (HMF) from a halo catalog or a given mass array.
+
+	Parameters:
+	-----------
+	halo_catalog : dict, optional
+		Dictionary containing halo properties, typically with a key 'MVIR' for halo masses.
+	mass : array-like, optional
+		Array of halo masses. Used if `halo_catalog` is not provided.
+	mr : float, optional
+		Minimum mass threshold for halos (default is 1.3e10 Msun/h).
+	hmf : str, optional
+		Type of HMF to return. Options are:
+		- 'counts': Return the counts of halos in each mass bin.
+		- 'dndm': Return the differential number density dn/dm.
+		- 'dndlog10m': Return the differential number density dn/dlog10m.
+		Default is 'counts'.
+	boxsize : float, optional
+		Size of the simulation box in Mpc/h. Required if `hmf` is 'dndm' or 'dndlog10m'.
+
+	Returns:
+	--------
+	tuple
+		Depending on the value of `hmf`, returns:
+		- counts, error, bin_edges: If `hmf` is 'counts'.
+		- dndm, error, bin_edges: If `hmf` is 'dndm'.
+		- dndlogm, error, bin_edges: If `hmf` is 'dndlog10m'.
+
+	Raises:
+	-------
+	AssertionError
+		If `hmf` is 'dndm' or 'dndlog10m' and `boxsize` is not provided.
+	"""
+
 	if halo_catalog is not None:
 		halo_mass = (halo_catalog['MVIR']*Gadget.units.mass).value
 
 	else:
 		halo_mass = mass
 
-	mass_min, mass_max = np.log10(55*mr), np.log10(max(halo_mass))  # In Msun/h
+	mass_min, mass_max = np.log10(200*mr), np.log10(max(halo_mass))  # In Msun/h
 	bins_per_dex = 10  # Bins per dex
 
 	halo_mass_cut = halo_mass[halo_mass>mr]
 
-	mf, bin_edges = np.histogram(np.log10(halo_mass_cut), bins=int(bins_per_dex*(mass_max-mass_min)),
+	# Get counts in each mass bin
+	counts, bin_edges = np.histogram(np.log10(halo_mass_cut), bins=int(bins_per_dex*(mass_max-mass_min)),
 							 range=(mass_min, mass_max))
+	error = np.sqrt(counts)
+	center = (bin_edges[:-1] + bin_edges[1:]) / 2
 
-	center = np.array([(bin_edges[j]+bin_edges[j+1])/2 for j in range(len(mf))])
+	if hmf == 'counts':
+		return counts, error, bin_edges
 
-	if return_dndlog10m is True:
+	else:
 		assert boxsize is not None, 'Need boxsize (in Mpc/h) to compute dn/dm'
 		Vbox = boxsize**3
-		bin_widths = np.array([(10**center[i+1]-10**center[i]) for i in range(len(center)-1)])
-		dndm = mf[:-1]/Vbox*10**center[:-1]/bin_widths*np.log(10)  # Count/Volume * M/delta_M
-		return dndm, 10**center[:-1]
+		bin_widths = np.diff(10**bin_edges)
+		dndm = counts/Vbox/bin_widths  # Count/Volume * 1/delta_M
+		error = error/Vbox/bin_widths
 
-	return mf, bin_edges
+		if hmf == 'dndm':
+			return dndm, error, bin_edges
+
+		elif hmf == 'dndlog10m':
+			dndlogm = dndm*10**center*np.log(10)  # Count/Volume * M/delta_M
+			error = error*10**center*np.log(10)
+
+			return dndlogm, error, bin_edges
 
 
 def get_total_Pe_halo(snap_base, halo_center, halo_radius, z, little_h):
