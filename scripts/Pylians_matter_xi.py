@@ -89,6 +89,6 @@ if __name__== '__main__':
 	delta -= 1.0
 
 
-	CF = PKL.Xi(delta, BoxSize, axis, MAS, verbose)
+	CF = PKL.Xi(delta, BoxSize, axis=axis, MAS=MAS)
 
 	np.savetxt(f'../../magneticum-data/data/Pylians/xi_matter/{sim_box}/xi_{sim_name}_z={z:.2f}_R{grid}.txt', np.column_stack((CF.r3D, CF.xi[:, 0])), delimiter='\t')
