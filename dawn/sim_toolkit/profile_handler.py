@@ -126,7 +126,7 @@ class HaloProfileHandler():
 	#         sigma_lnprof = halo['fields']['v_disp'][3]
 
 		elif field == 'matter':
-			# We need to retrieve dm and gas profiles and sum them
+			# We need to retrieve dm, gas, and star profiles and sum them
 			r_dm = halo['fields']['cdm'][1]/halo['rvir']
 			profile_dm = halo['fields']['cdm'][0]
 			npart_dm = halo['fields']['cdm'][2]
@@ -135,9 +135,13 @@ class HaloProfileHandler():
 			profile_gas = halo['fields']['gas'][0]
 			npart_gas = halo['fields']['gas'][2]
 
-			profile = profile_dm + profile_gas
-			r = (r_dm*profile_dm + r_gas*profile_gas)/profile
-			npart = npart_dm + npart_gas
+			r_star = halo['fields']['star'][1]/halo['rvir']
+			profile_star = halo['fields']['star'][0]
+			npart_star = halo['fields']['star'][2]
+
+			profile = profile_dm + profile_gas + profile_star
+			r = (r_dm*profile_dm + r_gas*profile_gas + r_star*profile_star)/profile
+			npart = npart_dm + npart_gas + npart_star
 			sigma_prof = profile/npart**0.5
 			sigma_lnprof = sigma_prof/profile
 
@@ -163,6 +167,25 @@ class HaloProfileHandler():
 			return profile, r, profile_rescale
 
 	def get_masked_profile(self, mmin, mmax, rmin, field):
+		"""
+		Get a masked profile based on mass and radial range.
+
+		Parameters:
+		-----------
+		mmin : float
+			Minimum mass threshold for selecting halos.
+		mmax : float
+			Maximum mass threshold for selecting halos.
+		rmin : float
+			Minimum radial distance for selecting radial bins (in units of kpc/h).
+		field : str
+			The field name of the profile container to be accessed.
+
+		Returns:
+		--------
+		ProfileContainer
+			A ProfileContainer object containing the masked profiles and associated data.
+		"""
 		profile_container = getattr(self, field)
 
 		# First we select all halos in mass range
@@ -183,10 +206,10 @@ class HaloProfileHandler():
 		r_mask = (r >= rmin[:, np.newaxis]) & (r <= rmax)
 
 		profile_args = {'mvir': mvir, 'rvir': rvir,
-				  		'profile': profile*r_mask,
+				  		'profile': np.where(r_mask, profile, np.nan),
 						# 'units': profile_container.units,
-						'profile_rescale': profile_rescale*r_mask,
-						'rbins': r*r_mask,
+						'profile_rescale': np.where(r_mask, profile_rescale, np.nan),
+						'rbins':np.where(r_mask,r, np.nan),
 						'sigma_prof': sigma_prof*r_mask,
 						'sigma_lnprof': sigma_lnprof*r_mask}
 
