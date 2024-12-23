@@ -1,4 +1,8 @@
 import glob
+import numpy as np
+
+import astropy.units as u
+import astropy.constants as const
 
 from dawn.sim_toolkit.power_spectrum_handler import PowerSpectrumHandler
 from dawn.sim_toolkit.baryon_fraction_handler import BaryonFractionHandler
@@ -79,6 +83,9 @@ class DataHandler:
 		self.sigma8 = cosmo['sigma8']
 		self.h = cosmo['H0'] / 100
 		self.fb = cosmo['Ob0'] / cosmo['Om0']
+
+		# Compute critical density
+		self.rho_crit = (3 * cosmo['H0'] * (u.km/u.s/u.Mpc)**2 / (8 * np.pi * const.G)).to(u.Msun/u.kpc**3)
 
 		self.cosmo_label = '$\Omega_m={:.3f},\,\sigma_8={:.3f},\,h={:.3f},f_b={:.3f}$'.format(
 			cosmo['Om0'], cosmo['sigma8'], self.h, self.fb
