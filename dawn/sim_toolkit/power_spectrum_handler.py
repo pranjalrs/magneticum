@@ -47,9 +47,11 @@ class PowerSpectrumHandler:
 
 		if (self.Pk_hydro is not None) and (self.Pk_dm is not None):
 			self.Pk_ratio = self.Pk_hydro / self.Pk_dm
-			kmin, kmax = 5, 15
+			kmin, kmax = 1, 10
 			k_idx = (self.k > kmin) & (self.k < kmax)
-			self.Pk_ratio_mean = np.median(self.Pk_ratio[k_idx])
+			# Weigh by the number of wavemodes in the bin
+			Pk_ratio_mean = np.trapz(self.Pk_ratio[k_idx] * self.k[k_idx]**3, self.k[k_idx]) / np.trapz(self.k[k_idx]**3, self.k[k_idx])
+			self.Pk_ratio_mean = Pk_ratio_mean #np.mean(self.Pk_ratio[k_idx])
 		else:
 			self.Pk_ratio = None
 			self.Pk_ratio_mean = None
