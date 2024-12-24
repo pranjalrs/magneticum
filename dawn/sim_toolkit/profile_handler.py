@@ -50,16 +50,17 @@ class HaloProfileHandler():
 
 		'''
 
-		profile, rbins, = [], []
-		rescale = []
+		profile, rescale = [], []
+		rbins, xbins = [], []
 		sigma_prof, sigma_lnprof = [], []
 		mvir, rvir = [], []
 
 		for halo in data:
-			prof, r, prof_rescale, sigma, lnsigma = cls.read_halo_data(halo, field, return_sigma=True)
+			prof, r, x, prof_rescale, sigma, lnsigma = cls.read_halo_data(halo, field, return_sigma=True)
 			profile.append(prof)
 			rescale.append(prof_rescale)
 			rbins.append(r)
+			xbins.append(x)
 			sigma_prof.append(sigma)
 			sigma_lnprof.append(lnsigma)
 
@@ -74,6 +75,7 @@ class HaloProfileHandler():
 			# 'units': prof.unit,
 			'profile_rescale': np.array(rescale),
 			'rbins': np.array(rbins),
+			'xbins': np.array(xbins),
 			'sigma_prof': np.array(sigma_prof),
 			'sigma_lnprof': np.array(sigma_lnprof)
 		}
@@ -99,21 +101,24 @@ class HaloProfileHandler():
 				or profile, r, and profile_rescale (if return_sigma is False).
 		'''
 		if field == 'rho_dm':
-			r = halo['fields']['cdm'][1]/halo['rvir']
+			r = halo['fields']['cdm'][1]
+			x = halo['fields']['cdm'][1]/halo['rvir']
 			profile = halo['fields']['cdm'][0]
 			npart = halo['fields']['cdm'][2]
 			sigma_prof = profile/npart**0.5
 			sigma_lnprof = sigma_prof/profile
 
 		elif field == 'Pe':
-			r = halo['fields']['Pe_Mead'][1]/halo['rvir']
+			r = halo['fields']['Pe_Mead'][1]
+			x = halo['fields']['Pe_Mead'][1]/halo['rvir']
 			profile = halo['fields']['Pe_Mead'][0]
 			npart = halo['fields']['Pe_Mead'][2]
 			sigma_prof = profile/npart**0.5
 			sigma_lnprof = sigma_prof/profile
 
 		elif field == 'gas':
-			r = halo['fields']['gas'][1]/halo['rvir']
+			r = halo['fields']['gas'][1]
+			x = halo['fields']['gas'][1]/halo['rvir']
 			profile = halo['fields']['gas'][0]
 			npart = halo['fields']['gas'][2]
 			sigma_prof = profile/npart**0.5
@@ -127,27 +132,32 @@ class HaloProfileHandler():
 
 		elif field == 'matter':
 			# We need to retrieve dm, gas, and star profiles and sum them
-			r_dm = halo['fields']['cdm'][1]/halo['rvir']
+			r_dm = halo['fields']['cdm'][1]
+			x_dm = halo['fields']['cdm'][1]/halo['rvir']
 			profile_dm = halo['fields']['cdm'][0]
 			npart_dm = halo['fields']['cdm'][2]
 
-			r_gas = halo['fields']['gas'][1]/halo['rvir']
+			r_gas = halo['fields']['gas'][1]
+			x_gas = halo['fields']['gas'][1]/halo['rvir']
 			profile_gas = halo['fields']['gas'][0]
 			npart_gas = halo['fields']['gas'][2]
 
-			r_star = halo['fields']['star'][1]/halo['rvir']
+			r_star = halo['fields']['star'][1]
+			x_star = halo['fields']['star'][1]/halo['rvir']
 			profile_star = halo['fields']['star'][0]
 			npart_star = halo['fields']['star'][2]
 
 			profile = profile_dm + profile_gas + profile_star
 			r = (r_dm*profile_dm + r_gas*profile_gas + r_star*profile_star)/profile
+			x = (x_dm*profile_dm + x_gas*profile_gas + x_star*profile_star)/profile
 			npart = npart_dm + npart_gas + npart_star
 			sigma_prof = profile/npart**0.5
 			sigma_lnprof = sigma_prof/profile
 
 		else:
 			try:
-				r = halo['fields'][field][1]/halo['rvir']
+				r = halo['fields'][field][1]
+				x = halo['fields'][field][1]/halo['rvir']
 				profile = halo['fields'][field][0]
 				npart = halo['fields'][field][2]
 				sigma_prof = profile/npart**0.5
@@ -161,10 +171,10 @@ class HaloProfileHandler():
 		# profile_rescale = [0.]*len(r)
 
 		if return_sigma:
-			return profile, r, profile_rescale, sigma_prof, sigma_lnprof
+			return profile, r, x, profile_rescale, sigma_prof, sigma_lnprof
 
 		else:
-			return profile, r, profile_rescale
+			return profile, r, x, profile_rescale
 
 	def get_masked_profile(self, mmin, mmax, rmin, field):
 		"""
