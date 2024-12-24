@@ -205,6 +205,7 @@ class HaloProfileHandler():
 		mvir = profile_container.mvir[mass_mask]
 		profile = np.vstack(profile_container.profile[mass_mask])
 		r = np.vstack(profile_container.rbins[mass_mask])
+		x = np.vstack(profile_container.xbins[mass_mask])
 		profile_rescale = np.vstack(profile_container.profile_rescale[mass_mask])
 		sigma_lnprof = np.vstack(profile_container.sigma_lnprof[mass_mask])
 		sigma_prof = np.vstack(profile_container.sigma_prof[mass_mask])
@@ -212,16 +213,17 @@ class HaloProfileHandler():
 
 		# Then we select all radial bins in the range
 		rmin = rmin / rvir
-		rmax = 1. # in r/Rvir
-		r_mask = (r >= rmin[:, np.newaxis]) & (r <= rmax)
+		xmax = 1. # in r/Rvir
+		x_mask = (x >= rmin[:, np.newaxis]) & (r <= xmax)
 
 		profile_args = {'mvir': mvir, 'rvir': rvir,
-				  		'profile': np.where(r_mask, profile, np.nan),
+				  		'profile': np.where(x_mask, profile, np.nan),
 						# 'units': profile_container.units,
-						'profile_rescale': np.where(r_mask, profile_rescale, np.nan),
-						'rbins':np.where(r_mask,r, np.nan),
-						'sigma_prof': sigma_prof*r_mask,
-						'sigma_lnprof': sigma_lnprof*r_mask}
+						'profile_rescale': np.where(x_mask, profile_rescale, np.nan),
+						'rbins':np.where(x_mask, r, np.nan),
+						'xbins':np.where(x_mask, x, np.nan),
+						'sigma_prof': sigma_prof*x_mask,
+						'sigma_lnprof': sigma_lnprof*x_mask}
 
 		return ProfileContainer(**profile_args)
 
