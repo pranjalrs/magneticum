@@ -6,7 +6,7 @@ from tqdm import tqdm
 import sys
 sys.path.append('../core/')
 
-from utils import get_comoving_electron_pressure, get_comoving_electron_pressure_Mead
+from utils import get_comoving_electron_pressure, get_comoving_electron_pressure_Mead, get_comoving_electron_density_Mead
 
 # GADGET-2 Units: https://wwwmpa.mpa-garching.mpg.de/gadget/users-guide.pdf
 vel_units = 1.0  # km/s
@@ -27,7 +27,7 @@ def get_field(ptype, snapshot, field_name, little_h, cell_volume=None):
 		Snapshot file read using g3read
 	field_name : str
 		Field name
-	
+
 	cell_volume : astropy.units
 		should be in length**3/h**3
 
@@ -58,6 +58,13 @@ def get_field(ptype, snapshot, field_name, little_h, cell_volume=None):
 
 		return get_comoving_electron_pressure_Mead(mass, Temp, Y, cell_volume).value * little_h**2
 
+	elif field_name == 'ne':
+		assert ptype==0, 'Can calculate electron density only for gas particles (ptype=0)'
+		mass = snapshot.read_new('MASS', ptypes=0)
+		Y = snapshot.read_new('Zs  ', ptypes=0)[:, 0]
+
+		return get_comoving_electron_density_Mead(mass, Temp, Y, cell_volume).value * little_h**2
+
 	else:
 		return snapshot.read_new(field_name, ptype)*units_dict[field_name]
 
@@ -85,7 +92,7 @@ def get_field_hist(ptype, field_name, boxsize, resolution, snap_base, nfiles):
 	ndarray
 		3D histogram of the field
 	"""
-	
+
 	field_hist = 0
 	num_part = 0
 	for i in range(nfiles):
@@ -102,18 +109,18 @@ def get_field_hist(ptype, field_name, boxsize, resolution, snap_base, nfiles):
 def get_mass_hist(boxsize, resolution, snap_base, nfiles):
 	"""Same as `get_field_hist()` but reads info for all particle types at once
 	"""
-	
+
 	field_hist = 0
 	num_part = 0
 	for i in range(nfiles):
 		data = g3read.read_new(snap_base + '.' + str(i), ['MASS', 'POS '], [0, 1, 4], do_flatten=False)
 		data_bh = g3read.read_new(snap_base + '.' + str(i), ['BHMA', 'POS '], [5])
-        
+
 		for pt in [0, 1, 4]:
 			this_hist, edges = np.histogramdd(data[pt]['POS ']*units_dict['POS '], bins=resolution, range=[[0, boxsize], [0, boxsize], [0, boxsize]], weights=data[pt]['MASS'])
 
 			field_hist += this_hist
-            
+
 		this_hist, edges = np.histogramdd(data_bh[5]['POS ']*units_dict['POS '], bins=resolution, range=[[0, boxsize], [0, boxsize], [0, boxsize]], weights=data_bh[5]['BHMA'])
 		field_hist += this_hist
 		print(i)
@@ -144,11 +151,11 @@ def get_field_hist_test(ptype, field_name, boxsize, resolution, snap_base, nfile
 		3D histogram of the field
 	"""
 
-	cell_volume = (boxsize*u.Mpc/resolution)**3    
+	cell_volume = (boxsize*u.Mpc/resolution)**3
 	field_hist = 0#np.zeros((resolution, resolution, resolution))
 	weight_hist = 0
 	num_part = 0
-    
+
 	print(f'Field: {field_name} to be weighted by {weight}')
 
 	for i in range(nfiles):
@@ -215,14 +222,14 @@ def calc_freq_FFT(boxsize, resolution):
 	-------
 	array, array
 		Frequency grid, window function
-	"""	
+	"""
 
 	spatial_bin_size = boxsize/np.double(resolution)  # Bin size
 	freq = np.fft.fftfreq(resolution, d=spatial_bin_size).astype('float32')[np.mgrid[0:resolution, 0:resolution, 0:resolution]]  # 3D freq grid
 
 	Wk = np.sinc(freq[0]*spatial_bin_size)*np.sinc(freq[1]*spatial_bin_size)*np.sinc(freq[2]*spatial_bin_size)
 	k = 2*np.pi*(freq[0]**2 + freq[1]**2 + freq[2]**2)**0.5
-	
+
 	return k, Wk
 
 
@@ -248,17 +255,17 @@ def calc_Pk(delta_k_hat, Wk, Vbox, k, kbins, CIC=False):
 	-------
 	array, array, array
 		Power spectrum, average k in each bin, number of modes in each bin
-	"""	
+	"""
 
 	Nbins = len(kbins) - 1
 	avgPk = np.empty(Nbins, dtype=float)
 	avgk = np.empty(Nbins, dtype=float)
 	Nk = np.empty(Nbins, dtype=float)
-	
+
 	for j in range(Nbins):
 		takeout_ID = np.where((k>kbins[j]) & (k<=kbins[j+1]))
 		k_now = k[takeout_ID]
-		
+
 		delta_k_now = delta_k_hat[takeout_ID]/Wk[takeout_ID]
 
 		if CIC is True:
@@ -268,7 +275,7 @@ def calc_Pk(delta_k_hat, Wk, Vbox, k, kbins, CIC=False):
 		avgPk[j] = np.mean(delta_k2_now)*Vbox
 		avgk[j] = np.mean(k_now)
 		Nk[j] = len(k_now)
-	
+
 	return avgPk, avgk, Nk
 
 def calc_Pk_cross(delta_k_hat1, delta_k_hat2, Wk, Vbox, k, kbins):
@@ -293,7 +300,7 @@ def calc_Pk_cross(delta_k_hat1, delta_k_hat2, Wk, Vbox, k, kbins):
 	-------
 	array, array, array
 		Power spectrum, average k in each bin, number of modes in each bin
-	"""	
+	"""
 
 	Nbins = len(kbins) - 1
 	avgPk = np.empty(Nbins, dtype=float)
@@ -310,5 +317,5 @@ def calc_Pk_cross(delta_k_hat1, delta_k_hat2, Wk, Vbox, k, kbins):
 		avgPk[j] = np.mean(delta_k12_now)*Vbox
 		avgk[j] = np.mean(k_now)
 		Nk[j] = len(k_now)
-	
+
 	return avgPk, avgk, Nk
