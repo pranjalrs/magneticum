@@ -22,7 +22,7 @@ parser.add_argument('--MAS', default='CIC', type=str)
 parser.add_argument('--threads', default=1, type=int)
 parser.add_argument('--save_cube', default=False, type=bool)
 parser.add_argument('--save_Pk', default=True, type=bool)
-parser.add_argument('--Pe', type=str)
+parser.add_argument('--field', type=str)
 
 def get_Pe_cube(Pe_cube, norm, little_h, ptype=0):
 	for i in range(f.header.num_files):
@@ -52,6 +52,19 @@ def get_Pe_Mead_cube(Pe_cube, little_h, ptype=0):
 
 		print(i)
 
+def get_ne_Mead_cube(ne_cube, little_h, ptype=0):
+	cell_volume = (BoxSize*u.Mpc/grid)**3
+	for i in range(f.header.num_files):
+		this_snap = g3read.GadgetFile(snap_path + str(i))
+		Pe = Pk_tools.get_field(ptype, this_snap, 'ne_Mead', little_h, cell_volume)
+		pos = this_snap.read_new('POS ', ptype)*1e-3
+
+
+		pos, Pe = pos.astype('float32'), Pe.astype('float32')
+		MASL.MA(pos, ne_cube, BoxSize, MAS, W=Pe, verbose=verbose)
+
+		print(i)
+
 if __name__ == '__main__':
 	args = parser.parse_args()
 
@@ -62,7 +75,7 @@ if __name__ == '__main__':
 	threads = args.threads
 	save_cube = args.save_cube
 	save_Pk = args.save_Pk
-	Pe_field = args.Pe
+	field = args.field
 
 	current_directory = os.getcwd()
 
@@ -88,21 +101,28 @@ if __name__ == '__main__':
 
 	Pe_cube = np.zeros((grid,grid,grid), dtype=np.float32)
 
-	if Pe_field == 'Pe_wht_vol':
+	if field == 'Pe_wht_vol':
 		norm = np.zeros((grid,grid,grid), dtype=np.float32)
 
 		get_Pe_cube(Pe_cube, norm, z=redshift, little_h=little_h)
 		Pe_cube[norm!=0] /= norm[norm!=0]
 		del norm
 
-	if Pe_field == 'Pe_Mead':
+	elif field == 'Pe_Mead':
 		get_Pe_Mead_cube(Pe_cube, z=redshift, little_h=little_h)
+
+	elif field == 'ne_Mead':
+		get_ne_Mead_cube(Pe_cube, z=redshift, little_h=little_h)
 
 	if save_cube is True:
 		#np.save(f'/xdisk/timeifler/pranjalrs/cube/{sim_box}_{Pe_field}_{MAS}_R{grid}.npy', Pe_cube)
-		np.save(f'../../Pressure_cube/{box}/{sim}/{Pe_field}_R{grid}_z={redshift:.4f}.npy', Pe_cube)
+		np.save(f'../../cube/{box}/{sim}/{field}_R{grid}_z={redshift:.4f}.npy', Pe_cube)
 
 	if save_Pk is True:
 		Pk = PKL.Pk(Pe_cube, BoxSize, axis, MAS, verbose)
 
-		np.savetxt(f'../../../magneticum-data/data/Pylians/Pk_pressure/{box}/{Pe_field}_R{grid}_z={redshift:.4f}.txt', np.column_stack((Pk.k3D, Pk.Pk[:,0])), delimiter='\t')
+		if 'Pe' in field:
+			np.savetxt(f'../../../magneticum-data/data/Pylians/Pk_pressure/{box}/{field}_R{grid}_z={redshift:.4f}.txt', np.column_stack((Pk.k3D, Pk.Pk[:,0])), delimiter='\t')
+
+		elif 'ne' in field:
+			np.savetxt(f'../../../magneticum-data/data/Pylians/Pk_ne/{box}/{field}_R{grid}_z={redshift:.4f}.txt', np.column_stack((Pk.k3D, Pk.Pk[:,0])), delimiter='\t')

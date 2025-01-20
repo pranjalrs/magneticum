@@ -58,7 +58,7 @@ def get_field(ptype, snapshot, field_name, little_h, cell_volume=None):
 
 		return get_comoving_electron_pressure_Mead(mass, Temp, Y, cell_volume).value * little_h**2
 
-	elif field_name == 'ne':
+	elif field_name == 'ne_Mead':
 		assert ptype==0, 'Can calculate electron density only for gas particles (ptype=0)'
 		mass = snapshot.read_new('MASS', ptypes=0)
 		Y = snapshot.read_new('Zs  ', ptypes=0)[:, 0]
