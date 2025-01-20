@@ -76,14 +76,40 @@ def get_comoving_electron_pressure(rho, Temp, Y):
 
 	return Pe
 
-def get_comoving_electron_pressure_Mead(mass, Temp, Y, volume):
 
+def get_comoving_electron_density_Mead(mass, Temp, Y, volume):
+	"""
+	Calculate the comoving electron density using the method described by Mead.
 
+	Parameters
+	----------
+	mass
+		The mass of the gas in solar masses.
+	Temp
+		The temperature of the gas in Kelvin.
+	Y
+		The helium mass fraction.
+	volume
+		The volume in cubic megaparsecs (Mpc^3).
+
+	Returns
+	-------
+	astropy.units.quantity.Quantity
+		The comoving electron density in units of cm^-3 * h^2.
+	"""
 	Temp = Temp * Gadget.units.Temperature
 	mass = mass * Gadget.units.mass
 	mu_e = 2/(2-Y) # Mean mass per electron
 	Ne = mass/constants.m_p/mu_e  # No. of electrons
-	Pe = Ne*constants.k_B*Temp/volume
+	ne = Ne/volume  # Electron density
+
+	ne = ne.to(1/u.cm**3*cu.littleh**2)
+
+	return ne
+
+def get_comoving_electron_pressure_Mead(mass, Temp, Y, volume):
+	ne = get_comoving_electron_density_Mead(mass, Temp, Y, volume)
+	Pe = ne*constants.k_B*Temp/volume
 
 	Pe = Pe.to(u.keV/u.cm**3*cu.littleh**2)
 
@@ -123,8 +149,6 @@ def get_physical_electron_pressure(rho, Temp, Y, z, little_h):
 	physical_Pe = comoving_Pe * Gadget.convert.pressure_to_physical(z, little_h)
 
 	return physical_Pe
-
-
 
 
 def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent=False, save_proj=False, is_dmo=False, filename=''):
@@ -211,7 +235,6 @@ def get_profile_for_halo(snap_base, halo_center, halo_radius, fields, recal_cent
 		plt.savefig(f'{filename}.pdf', bbox_inches='tight', dpi=100)
 		plt.close()
 	return profiles_dict
-
 
 
 def _collect_profiles_for_halo(halo_center, halo_radius, particle_data, ptype, field_type, is_dmo, ax):
@@ -413,6 +436,7 @@ def _get_field_for_halo(particle_pos, particle_data, field_type, bins, mask, is_
 
 		return density, binned_density*density.unit, bin_centers, part_per_bin
 
+
 def _build_hist_bins(pos, bins):
 	"""
 	Build histogram for a given set of particle positions and bins.
@@ -433,6 +457,7 @@ def _build_hist_bins(pos, bins):
 
 
 	return bin_centers, bins_shell, part_per_bin
+
 
 def get_halo_catalog(group_base, blocks=['GPOS', 'MVIR', 'RVIR', 'M5CC', 'R5CC'], mmin=1e12):
 	box_name = group_base.split('/')[-3]
